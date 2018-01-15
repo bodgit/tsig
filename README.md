@@ -17,7 +17,7 @@ func main() {
 	}
 	defer c.Close()
 
-	keyname, err := c.NegotiateGssapiCtx("ns.example.com")
+	keyname, err := c.NegotiateContext("ns.example.com")
 	if err != nil {
 		panic(err)
 	}
@@ -57,7 +57,7 @@ func main() {
 
 	// Cleanup
 
-	err = c.DeleteGssapiCtx(keyname)
+	err = c.DeleteContext(keyname)
 	if err != nil {
 		panic(err)
 	}

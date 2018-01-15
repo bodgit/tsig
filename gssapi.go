@@ -7,10 +7,8 @@ import (
 	"fmt"
 	"github.com/apcera/gssapi"
 	"github.com/miekg/dns"
-	"math/rand"
 	"net"
 	"strings"
-	"time"
 )
 
 type Context struct {
@@ -35,9 +33,12 @@ func New() (*Context, error) {
 
 func (c *Context) Close() error {
 
-	// FIXME possibly need to loop through and delete any active contexts
-
-	c.ctx = make(map[string]*gssapi.CtxId)
+	for k := range c.ctx {
+		err := c.DeleteContext(&k)
+		if err != nil {
+			return err
+		}
+	}
 
 	return c.Unload()
 }
@@ -58,6 +59,7 @@ func (c *Context) TsigGenerateGssapi(msg []byte, algorithm, name, secret string)
 		return nil, err
 	}
 	defer message.Release()
+
 	token, err := ctx.GetMIC(gssapi.GSS_C_QOP_DEFAULT, message)
 	if err != nil {
 		return nil, err
@@ -84,32 +86,33 @@ func (c *Context) TsigVerifyGssapi(stripped []byte, tsig *dns.TSIG, name, secret
 		return err
 	}
 	defer message.Release()
+
 	msgMAC, err := hex.DecodeString(tsig.MAC)
 	if err != nil {
 		return err
 	}
+
 	// Turn the TSIG MAC bytes into a *gssapi.Buffer
 	token, err := c.MakeBufferBytes(msgMAC)
 	if err != nil {
 		return err
 	}
 	defer token.Release()
+
 	// This is the actual verification bit
 	_, err = ctx.VerifyMIC(message, token)
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 
-func (c *Context) NegotiateGssapiCtx(host string) (*string, error) {
+func (c *Context) NegotiateContext(host string) (*string, error) {
 
-	seed := rand.NewSource(time.Now().UnixNano())
-	rng := rand.New(seed)
+	keyname := generateTkeyName(host)
 
-	keyname := dns.Fqdn(fmt.Sprintf("%d.sig-%s", rng.Int31(), host))
-
-	buffer, err := c.MakeBufferString(fmt.Sprintf("DNS/%s", host))
+	buffer, err := c.MakeBufferString(generateSpn(host))
 	if err != nil {
 		return nil, err
 	}
@@ -120,29 +123,10 @@ func (c *Context) NegotiateGssapiCtx(host string) (*string, error) {
 		return nil, err
 	}
 
+	client, msg := bootstrapDnsClient(keyname)
+
 	var input *gssapi.Buffer = c.GSS_C_NO_BUFFER
 	var ctx *gssapi.CtxId = c.GSS_C_NO_CONTEXT
-	var rr *dns.Msg = nil
-
-	client := &dns.Client{
-		Net:           "tcp",
-		TsigAlgorithm: map[string]*dns.TsigAlgorithm{GssTsig: {nil, nil}},
-		TsigSecret:    map[string]string{keyname: ""},
-	}
-
-	m := &dns.Msg{
-		MsgHdr: dns.MsgHdr{
-			RecursionDesired: false,
-		},
-		Question: make([]dns.Question, 1),
-		Extra:    make([]dns.RR, 1),
-	}
-
-	m.Question[0] = dns.Question{
-		Name:   keyname,
-		Qtype:  dns.TypeTKEY,
-		Qclass: dns.ClassANY,
-	}
 
 	for ok := true; ok; ok = c.LastStatus.Major.ContinueNeeded() {
 		nctx, _, output, _, _, err := c.InitSecContext(
@@ -165,21 +149,7 @@ func (c *Context) NegotiateGssapiCtx(host string) (*string, error) {
 			break
 		}
 
-		now := time.Now().Unix()
-		m.Extra[0] = &dns.TKEY{
-			Hdr: dns.RR_Header{
-				Name:   keyname,
-				Rrtype: dns.TypeTKEY,
-				Class:  dns.ClassANY,
-				Ttl:    0,
-			},
-			Algorithm:  GssTsig,
-			Mode:       3,
-			Inception:  uint32(now),
-			Expiration: uint32(now),
-			KeySize:    uint16(output.Length()),
-			Key:        hex.EncodeToString(output.Bytes()),
-		}
+		msg.Extra[0] = generateTkey(keyname, output.Bytes())
 
 		addrs, err := net.LookupHost(host)
 		if err != nil {
@@ -187,7 +157,7 @@ func (c *Context) NegotiateGssapiCtx(host string) (*string, error) {
 		}
 
 		// FIXME Try all resolved addresses in case of failure
-		rr, _, err = client.Exchange(m, net.JoinHostPort(addrs[0], "53"))
+		rr, _, err := client.Exchange(msg, net.JoinHostPort(addrs[0], "53"))
 		if err != nil {
 			return nil, err
 		}
@@ -234,7 +204,7 @@ func (c *Context) NegotiateGssapiCtx(host string) (*string, error) {
 	return &keyname, nil
 }
 
-func (c *Context) DeleteGssapiCtx(keyname *string) error {
+func (c *Context) DeleteContext(keyname *string) error {
 
 	ctx, ok := c.ctx[*keyname]
 	if !ok {
