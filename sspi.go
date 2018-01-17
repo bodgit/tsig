@@ -42,14 +42,17 @@ func (c *Context) TsigGenerateGssapi(msg []byte, algorithm, name, secret string)
 		return nil, dns.ErrKeyAlg
 	}
 
-	_, ok := c.ctx[name]
+	ctx, ok := c.ctx[name]
 	if !ok {
 		return nil, dns.ErrSecret
 	}
 
-	// TODO
+	token, err := ctx.MakeSignature(msg, 0, 0)
+	if err != nil {
+		return nil, err
+	}
 
-	return nil, nil
+	return token, nil
 }
 
 func (c *Context) TsigVerifyGssapi(stripped []byte, tsig *dns.TSIG, name, secret string) error {
@@ -58,15 +61,24 @@ func (c *Context) TsigVerifyGssapi(stripped []byte, tsig *dns.TSIG, name, secret
 		return dns.ErrKeyAlg
 	}
 
-	_, ok := c.ctx[name]
+	ctx, ok := c.ctx[name]
 	if !ok {
 		return dns.ErrSecret
 	}
 
-	// TODO
+	token, err := hex.DecodeString(tsig.MAC)
+	if err != nil {
+		return err
+	}
+
+	_, err = ctx.VerifySignature(stripped, token, 0)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
+
 func (c *Context) NegotiateContext(host string) (*string, error) {
 
 	keyname := generateTkeyName(host)
