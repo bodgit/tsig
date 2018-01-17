@@ -36,7 +36,7 @@ func (c *Context) Close() error {
 	return nil
 }
 
-func (c *Context) TsigGenerateGssapi(msg []byte, algorithm, name, secret string) ([]byte, error) {
+func (c *Context) GenerateGssTsig(msg []byte, algorithm, name, secret string) ([]byte, error) {
 
 	if strings.ToLower(algorithm) != GssTsig {
 		return nil, dns.ErrKeyAlg
@@ -55,7 +55,7 @@ func (c *Context) TsigGenerateGssapi(msg []byte, algorithm, name, secret string)
 	return token, nil
 }
 
-func (c *Context) TsigVerifyGssapi(stripped []byte, tsig *dns.TSIG, name, secret string) error {
+func (c *Context) VerifyGssTsig(stripped []byte, tsig *dns.TSIG, name, secret string) error {
 
 	if strings.ToLower(tsig.Algorithm) != GssTsig {
 		return dns.ErrKeyAlg

@@ -24,7 +24,7 @@ func main() {
 
 	client := &dns.Client{
 		Net:           "tcp",
-		TsigAlgorithm: map[string]*dns.TsigAlgorithm{tsig.GssTsig: {c.TsigGenerateGssapi, c.TsigVerifyGssapi}},
+		TsigAlgorithm: map[string]*dns.TsigAlgorithm{tsig.GssTsig: {c.GenerateGssTsig, c.VerifyGssTsig}},
 		TsigSecret:    map[string]string{*keyname: ""},
 	}
 
