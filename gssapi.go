@@ -149,6 +149,7 @@ func (c *Context) NegotiateContext(host string) (*string, error) {
 			break
 		}
 
+		msg.Id = dns.Id()
 		msg.Extra[0] = generateTkey(keyname, output.Bytes())
 
 		addrs, err := net.LookupHost(host)
