@@ -11,10 +11,15 @@ import (
 	"strings"
 )
 
+// Context maps the TKEY name to the context that negotiated it as
+// well as any other internal state.
 type Context struct {
 	ctx map[string]*negotiate.ClientContext
 }
 
+// New performs any library initialization necessary.
+// It returns a context handle for any further functions along with any error
+// that occurred.
 func New() (*Context, error) {
 
 	c := &Context{
@@ -24,6 +29,9 @@ func New() (*Context, error) {
 	return c, nil
 }
 
+// Close deletes any active contexts and unloads any underlying libraries as
+// necessary.
+// It returns any error that occurred.
 func (c *Context) Close() error {
 
 	for k := range c.ctx {
@@ -36,6 +44,13 @@ func (c *Context) Close() error {
 	return nil
 }
 
+// GenerateGssTsig generates the TSIG MAC based on the established context.
+// It is not intended to be called directly but by the github/miekg/dns
+// package as an algorithm-specific callback.
+// It is called with the bytes of the DNS message, the algorithm name, the
+// TSIG name (which is the negotiated TKEY for this context) and the secret
+// (which is ignored).
+// It returns the bytes for the TSIG MAC and any error that occurred.
 func (c *Context) GenerateGssTsig(msg []byte, algorithm, name, secret string) ([]byte, error) {
 
 	if strings.ToLower(algorithm) != GssTsig {
@@ -55,6 +70,13 @@ func (c *Context) GenerateGssTsig(msg []byte, algorithm, name, secret string) ([
 	return token, nil
 }
 
+// VerifyGssTsig verifies the TSIG MAC based on the established context.
+// It is not intended to be called directly but by the github.com/miekg/dns
+// package as an algorithm-specific callback.
+// It is called with the bytes of the DNS message, the TSIG record, the TSIG
+// name (which is the negotiated TKEY for this context) and the secret (which
+// is ignored).
+// It returns any error that occurred.
 func (c *Context) VerifyGssTsig(stripped []byte, tsig *dns.TSIG, name, secret string) error {
 
 	if strings.ToLower(tsig.Algorithm) != GssTsig {
@@ -79,6 +101,9 @@ func (c *Context) VerifyGssTsig(stripped []byte, tsig *dns.TSIG, name, secret st
 	return nil
 }
 
+// NegotiateContext exchanges RFC 2930 TKEY records with the indicated DNS
+// server to establish a security context for further use.
+// It returns the negotiated TKEY name and any error that occurred.
 func (c *Context) NegotiateContext(host string) (*string, error) {
 
 	keyname := generateTKEYName(host)
@@ -160,6 +185,9 @@ func (c *Context) NegotiateContext(host string) (*string, error) {
 	return &keyname, nil
 }
 
+// DeleteContext deletes the active security context associated with the given
+// TKEY name.
+// It returns any error that occurred.
 func (c *Context) DeleteContext(keyname *string) error {
 
 	ctx, ok := c.ctx[*keyname]

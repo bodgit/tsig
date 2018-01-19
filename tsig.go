@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+// RFC 3645 defines this as the algorithm name to use when negotiating a
+// GSSAPI context. This is transmitted as a domain name.
 const (
 	GssTsig = "gss-tsig."
 )
