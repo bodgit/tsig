@@ -81,7 +81,7 @@ func (c *Context) VerifyGssTsig(stripped []byte, tsig *dns.TSIG, name, secret st
 
 func (c *Context) NegotiateContext(host string) (*string, error) {
 
-	keyname := generateTkeyName(host)
+	keyname := generateTKEYName(host)
 
 	creds, err := negotiate.AcquireCurrentUserCredentials()
 	if err != nil {
@@ -89,20 +89,20 @@ func (c *Context) NegotiateContext(host string) (*string, error) {
 	}
 	defer creds.Release()
 
-	ctx, output, err := negotiate.NewClientContext(creds, generateSpn(host))
+	ctx, output, err := negotiate.NewClientContext(creds, generateSPN(host))
 	if err != nil {
 		return nil, err
 	}
 
-	client, msg := bootstrapDnsClient(keyname)
+	client, msg := bootstrapDNSClient(keyname)
 
 	var completed bool
-	var input []byte = nil
+	var input []byte
 
 	for ok := false; !ok; ok = completed {
 
 		msg.Id = dns.Id()
-		msg.Extra[0] = generateTkey(keyname, output)
+		msg.Extra[0] = generateTKEY(keyname, output)
 
 		addrs, err := net.LookupHost(host)
 		if err != nil {

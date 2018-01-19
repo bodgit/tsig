@@ -110,9 +110,9 @@ func (c *Context) VerifyGssTsig(stripped []byte, tsig *dns.TSIG, name, secret st
 
 func (c *Context) NegotiateContext(host string) (*string, error) {
 
-	keyname := generateTkeyName(host)
+	keyname := generateTKEYName(host)
 
-	buffer, err := c.MakeBufferString(generateSpn(host))
+	buffer, err := c.MakeBufferString(generateSPN(host))
 	if err != nil {
 		return nil, err
 	}
@@ -123,10 +123,10 @@ func (c *Context) NegotiateContext(host string) (*string, error) {
 		return nil, err
 	}
 
-	client, msg := bootstrapDnsClient(keyname)
+	client, msg := bootstrapDNSClient(keyname)
 
-	var input *gssapi.Buffer = c.GSS_C_NO_BUFFER
-	var ctx *gssapi.CtxId = c.GSS_C_NO_CONTEXT
+	var input = c.GSS_C_NO_BUFFER
+	var ctx = c.GSS_C_NO_CONTEXT
 
 	for ok := true; ok; ok = c.LastStatus.Major.ContinueNeeded() {
 		nctx, _, output, _, _, err := c.InitSecContext(
@@ -150,7 +150,7 @@ func (c *Context) NegotiateContext(host string) (*string, error) {
 		}
 
 		msg.Id = dns.Id()
-		msg.Extra[0] = generateTkey(keyname, output.Bytes())
+		msg.Extra[0] = generateTKEY(keyname, output.Bytes())
 
 		addrs, err := net.LookupHost(host)
 		if err != nil {

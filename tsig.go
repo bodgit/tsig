@@ -12,7 +12,7 @@ const (
 	GssTsig = "gss-tsig."
 )
 
-func generateTkeyName(host string) string {
+func generateTKEYName(host string) string {
 
 	seed := rand.NewSource(time.Now().UnixNano())
 	rng := rand.New(seed)
@@ -20,12 +20,12 @@ func generateTkeyName(host string) string {
 	return dns.Fqdn(fmt.Sprintf("%d.sig-%s", rng.Int31(), host))
 }
 
-func generateSpn(host string) string {
+func generateSPN(host string) string {
 
 	return fmt.Sprintf("DNS/%s", host)
 }
 
-func bootstrapDnsClient(keyname string) (*dns.Client, *dns.Msg) {
+func bootstrapDNSClient(keyname string) (*dns.Client, *dns.Msg) {
 
 	client := &dns.Client{
 		Net:           "tcp",
@@ -50,7 +50,7 @@ func bootstrapDnsClient(keyname string) (*dns.Client, *dns.Msg) {
 	return client, msg
 }
 
-func generateTkey(keyname string, tkey []byte) *dns.TKEY {
+func generateTKEY(keyname string, tkey []byte) *dns.TKEY {
 
 	now := time.Now().Unix()
 
