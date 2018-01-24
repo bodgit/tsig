@@ -3,8 +3,10 @@ package tsig
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/hashicorp/go-multierror"
 	"github.com/miekg/dns"
 	"math/rand"
+	"net"
 	"time"
 )
 
@@ -27,7 +29,7 @@ func generateSPN(host string) string {
 	return fmt.Sprintf("DNS/%s", host)
 }
 
-func bootstrapDNSClient(keyname string) (*dns.Client, *dns.Msg) {
+func exchangeTKEY(host, keyname string, input []byte) ([]byte, error) {
 
 	client := &dns.Client{
 		Net:           "tcp",
@@ -49,14 +51,11 @@ func bootstrapDNSClient(keyname string) (*dns.Client, *dns.Msg) {
 		Qclass: dns.ClassANY,
 	}
 
-	return client, msg
-}
-
-func generateTKEY(keyname string, tkey []byte) *dns.TKEY {
+	msg.Id = dns.Id()
 
 	now := time.Now().Unix()
 
-	return &dns.TKEY{
+	msg.Extra[0] = &dns.TKEY{
 		Hdr: dns.RR_Header{
 			Name:   keyname,
 			Rrtype: dns.TypeTKEY,
@@ -67,7 +66,51 @@ func generateTKEY(keyname string, tkey []byte) *dns.TKEY {
 		Mode:       3,
 		Inception:  uint32(now),
 		Expiration: uint32(now),
-		KeySize:    uint16(len(tkey)),
-		Key:        hex.EncodeToString(tkey),
+		KeySize:    uint16(len(input)),
+		Key:        hex.EncodeToString(input),
 	}
+
+	addrs, err := net.LookupHost(host)
+	if err != nil {
+		return nil, err
+	}
+
+	var rr *dns.Msg
+	var errs error
+	for _, addr := range addrs {
+		rr, _, err = client.Exchange(msg, net.JoinHostPort(addr, "53"))
+		if err == nil {
+			break
+		}
+		errs = multierror.Append(errs, err)
+	}
+
+	if rr == nil {
+		return nil, errs
+	}
+
+	if rr.Rcode != dns.RcodeSuccess {
+		return nil, fmt.Errorf("DNS error: %s (%d)", dns.RcodeToString[rr.Rcode], rr.Rcode)
+	}
+
+	// There should only ever be one answer RR of type TKEY
+	if len(rr.Answer) != 1 || rr.Answer[0].Header().Rrtype != dns.TypeTKEY {
+		return nil, fmt.Errorf("Received non-TKEY response")
+	}
+
+	if rr.Answer[0].Header().Name != keyname {
+		return nil, fmt.Errorf("TKEY name does not match")
+	}
+
+	t := rr.Answer[0].(*dns.TKEY)
+	if t.Error != 0 {
+		return nil, fmt.Errorf("TKEY error: %d", t.Error)
+	}
+
+	key, err := hex.DecodeString(t.Key)
+	if err != nil {
+		return nil, err
+	}
+
+	return key, nil
 }

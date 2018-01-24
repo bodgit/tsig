@@ -6,8 +6,8 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/apcera/gssapi"
+	"github.com/hashicorp/go-multierror"
 	"github.com/miekg/dns"
-	"net"
 	"strings"
 )
 
@@ -41,14 +41,12 @@ func New() (*Context, error) {
 // It returns any error that occurred.
 func (c *Context) Close() error {
 
+	var errs error
 	for k := range c.ctx {
-		err := c.DeleteContext(&k)
-		if err != nil {
-			return err
-		}
+		errs = multierror.Append(errs, c.DeleteContext(&k))
 	}
 
-	return c.Unload()
+	return multierror.Append(errs, c.Unload())
 }
 
 // GenerateGssTsig generates the TSIG MAC based on the established context.
@@ -148,10 +146,8 @@ func (c *Context) NegotiateContext(host string) (*string, error) {
 		return nil, err
 	}
 
-	client, msg := bootstrapDNSClient(keyname)
-
-	var input = c.GSS_C_NO_BUFFER
-	var ctx = c.GSS_C_NO_CONTEXT
+	var input *gssapi.Buffer
+	var ctx *gssapi.CtxId
 
 	for ok := true; ok; ok = c.LastStatus.Major.ContinueNeeded() {
 		nctx, _, output, _, _, err := c.InitSecContext(
@@ -174,53 +170,22 @@ func (c *Context) NegotiateContext(host string) (*string, error) {
 			break
 		}
 
-		msg.Id = dns.Id()
-		msg.Extra[0] = generateTKEY(keyname, output.Bytes())
+		var errs error
 
-		addrs, err := net.LookupHost(host)
+		tkey, err := exchangeTKEY(host, keyname, output.Bytes())
 		if err != nil {
-			return nil, err
+			errs = multierror.Append(errs, err)
+			errs = multierror.Append(errs, ctx.DeleteSecContext())
+			return nil, errs
 		}
 
-		// FIXME Try all resolved addresses in case of failure
-		rr, _, err := client.Exchange(msg, net.JoinHostPort(addrs[0], "53"))
+		input, err = c.MakeBufferBytes(tkey)
 		if err != nil {
-			return nil, err
+			errs = multierror.Append(errs, err)
+			errs = multierror.Append(errs, ctx.DeleteSecContext())
+			return nil, errs
 		}
-
-		if rr.Rcode != dns.RcodeSuccess {
-			err = ctx.DeleteSecContext()
-			if err != nil {
-				return nil, err
-			}
-			return nil, fmt.Errorf("DNS error: %s (%d)", dns.RcodeToString[rr.Rcode], rr.Rcode)
-		}
-
-		// FIXME Perform wellformed-ness checks
-
-		for _, ans := range rr.Answer {
-			switch t := ans.(type) {
-			case *dns.TKEY:
-				if t.Error != 0 {
-					err = ctx.DeleteSecContext()
-					if err != nil {
-						return nil, err
-					}
-					return nil, fmt.Errorf("TKEY error: %d", t.Error)
-				}
-
-				b, err := hex.DecodeString(t.Key)
-				if err != nil {
-					return nil, err
-				}
-
-				input, err = c.MakeBufferBytes(b)
-				defer input.Release()
-				if err != nil {
-					return nil, err
-				}
-			}
-		}
+		defer input.Release()
 	}
 
 	// nsupdate(1) intentionally skips the TSIG on the TKEY response
