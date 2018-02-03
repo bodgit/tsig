@@ -1,11 +1,12 @@
-// +build !windows
+// +build windows
 
-package tsig
+package gss
 
 import (
 	"encoding/hex"
 	"fmt"
-	"github.com/apcera/gssapi"
+	"github.com/alexbrainman/sspi/negotiate"
+	"github.com/bodgit/tsig"
 	"github.com/hashicorp/go-multierror"
 	"github.com/miekg/dns"
 	"strings"
@@ -14,8 +15,7 @@ import (
 // Context maps the TKEY name to the context that negotiated it as
 // well as any other internal state.
 type Context struct {
-	*gssapi.Lib // A handle to the underlying GSSAPI library.
-	ctx         map[string]*gssapi.CtxId
+	ctx map[string]*negotiate.ClientContext
 }
 
 // New performs any library initialization necessary.
@@ -23,14 +23,8 @@ type Context struct {
 // that occurred.
 func New() (*Context, error) {
 
-	lib, err := gssapi.Load(nil)
-	if err != nil {
-		return nil, err
-	}
-
 	c := &Context{
-		Lib: lib,
-		ctx: make(map[string]*gssapi.CtxId),
+		ctx: make(map[string]*negotiate.ClientContext),
 	}
 
 	return c, nil
@@ -46,7 +40,7 @@ func (c *Context) Close() error {
 		errs = multierror.Append(errs, c.DeleteContext(&k))
 	}
 
-	return multierror.Append(errs, c.Unload())
+	return errs
 }
 
 // GenerateGssTsig generates the TSIG MAC based on the established context.
@@ -58,7 +52,7 @@ func (c *Context) Close() error {
 // It returns the bytes for the TSIG MAC and any error that occurred.
 func (c *Context) GenerateGssTsig(msg []byte, algorithm, name, secret string) ([]byte, error) {
 
-	if strings.ToLower(algorithm) != GssTsig {
+	if strings.ToLower(algorithm) != tsig.Gss {
 		return nil, dns.ErrKeyAlg
 	}
 
@@ -67,19 +61,12 @@ func (c *Context) GenerateGssTsig(msg []byte, algorithm, name, secret string) ([
 		return nil, dns.ErrSecret
 	}
 
-	message, err := c.MakeBufferBytes(msg)
+	token, err := ctx.MakeSignature(msg, 0, 0)
 	if err != nil {
 		return nil, err
 	}
-	defer message.Release()
 
-	token, err := ctx.GetMIC(gssapi.GSS_C_QOP_DEFAULT, message)
-	if err != nil {
-		return nil, err
-	}
-	defer token.Release()
-
-	return token.Bytes(), nil
+	return token, nil
 }
 
 // VerifyGssTsig verifies the TSIG MAC based on the established context.
@@ -89,9 +76,9 @@ func (c *Context) GenerateGssTsig(msg []byte, algorithm, name, secret string) ([
 // name (which is the negotiated TKEY for this context) and the secret (which
 // is ignored).
 // It returns any error that occurred.
-func (c *Context) VerifyGssTsig(stripped []byte, tsig *dns.TSIG, name, secret string) error {
+func (c *Context) VerifyGssTsig(stripped []byte, t *dns.TSIG, name, secret string) error {
 
-	if strings.ToLower(tsig.Algorithm) != GssTsig {
+	if strings.ToLower(t.Algorithm) != tsig.Gss {
 		return dns.ErrKeyAlg
 	}
 
@@ -100,27 +87,12 @@ func (c *Context) VerifyGssTsig(stripped []byte, tsig *dns.TSIG, name, secret st
 		return dns.ErrSecret
 	}
 
-	// Turn the TSIG-stripped message bytes into a *gssapi.Buffer
-	message, err := c.MakeBufferBytes(stripped)
-	if err != nil {
-		return err
-	}
-	defer message.Release()
-
-	msgMAC, err := hex.DecodeString(tsig.MAC)
+	token, err := hex.DecodeString(t.MAC)
 	if err != nil {
 		return err
 	}
 
-	// Turn the TSIG MAC bytes into a *gssapi.Buffer
-	token, err := c.MakeBufferBytes(msgMAC)
-	if err != nil {
-		return err
-	}
-	defer token.Release()
-
-	// This is the actual verification bit
-	_, err = ctx.VerifyMIC(message, token)
+	_, err = ctx.VerifySignature(stripped, token, 0)
 	if err != nil {
 		return err
 	}
@@ -135,57 +107,36 @@ func (c *Context) NegotiateContext(host string) (*string, error) {
 
 	keyname := generateTKEYName(host)
 
-	buffer, err := c.MakeBufferString(generateSPN(host))
+	creds, err := negotiate.AcquireCurrentUserCredentials()
 	if err != nil {
 		return nil, err
 	}
-	defer buffer.Release()
+	defer creds.Release()
 
-	service, err := buffer.Name(c.GSS_KRB5_NT_PRINCIPAL_NAME)
+	ctx, output, err := negotiate.NewClientContext(creds, generateSPN(host))
 	if err != nil {
 		return nil, err
 	}
 
-	var input *gssapi.Buffer
-	var ctx *gssapi.CtxId
+	var completed bool
 
-	for ok := true; ok; ok = c.LastStatus.Major.ContinueNeeded() {
-		nctx, _, output, _, _, err := c.InitSecContext(
-			c.GSS_C_NO_CREDENTIAL,
-			ctx, // nil initially
-			service,
-			c.GSS_C_NO_OID,
-			gssapi.GSS_C_DELEG_FLAG|gssapi.GSS_C_MUTUAL_FLAG|gssapi.GSS_C_REPLAY_FLAG|gssapi.GSS_C_SEQUENCE_FLAG|gssapi.GSS_C_INTEG_FLAG,
-			0,
-			c.GSS_C_NO_CHANNEL_BINDINGS,
-			input)
-		defer output.Release()
-		ctx = nctx
-		if err != nil {
-			if !c.LastStatus.Major.ContinueNeeded() {
-				return nil, err
-			}
-		} else {
-			// There is no further token to send
-			break
-		}
+	for ok := false; !ok; ok = completed {
 
 		var errs error
 
-		tkey, err := exchangeTKEY(host, keyname, output.Bytes())
+		input, err := exchangeTKEY(host, keyname, output)
 		if err != nil {
 			errs = multierror.Append(errs, err)
-			errs = multierror.Append(errs, ctx.DeleteSecContext())
+			errs = multierror.Append(errs, ctx.Release())
 			return nil, errs
 		}
 
-		input, err = c.MakeBufferBytes(tkey)
+		completed, output, err = ctx.Update(input)
 		if err != nil {
 			errs = multierror.Append(errs, err)
-			errs = multierror.Append(errs, ctx.DeleteSecContext())
+			errs = multierror.Append(errs, ctx.Release())
 			return nil, errs
 		}
-		defer input.Release()
 	}
 
 	// nsupdate(1) intentionally skips the TSIG on the TKEY response
@@ -205,7 +156,7 @@ func (c *Context) DeleteContext(keyname *string) error {
 		return fmt.Errorf("No such context")
 	}
 
-	err := ctx.DeleteSecContext()
+	err := ctx.Release()
 	if err != nil {
 		return err
 	}

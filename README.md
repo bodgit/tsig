@@ -7,6 +7,7 @@ package main
 import (
 	"fmt"
 	"github.com/bodgit/tsig"
+	"github.com/bodgit/tsig/gss"
 	"github.com/miekg/dns"
 	"net"
 	"time"
@@ -14,7 +15,7 @@ import (
 
 func main() {
 
-	c, err := tsig.New()
+	c, err := gss.New()
 	if err != nil {
 		panic(err)
 	}
@@ -27,7 +28,7 @@ func main() {
 
 	client := &dns.Client{
 		Net:           "tcp",
-		TsigAlgorithm: map[string]*dns.TsigAlgorithm{tsig.GssTsig: {c.GenerateGssTsig, c.VerifyGssTsig}},
+		TsigAlgorithm: map[string]*dns.TsigAlgorithm{tsig.Gss: {c.GenerateGssTsig, c.VerifyGssTsig}},
 		TsigSecret:    map[string]string{*keyname: ""},
 	}
 
@@ -42,7 +43,7 @@ func main() {
 	}
 	msg.Insert([]dns.RR{insert})
 
-	msg.SetTsig(*keyname, tsig.GssTsig, 300, time.Now().Unix())
+	msg.SetTsig(*keyname, tsig.Gss, 300, time.Now().Unix())
 
 	addrs, err := net.LookupHost("ns.example.com")
 	if err != nil {
