@@ -1,13 +1,71 @@
+/*
+Package gss implements RFC 3645 GSS-TSIG functions for the
+github.com/miekg/dns package. This permits sending signed dynamic DNS update
+messages to Windows servers that have the zone require "Secure only" updates.
+
+Basic usage pattern for setting up a client:
+
+        c, err := gss.New()
+        if err != nil {
+                panic(err)
+        }
+        defer c.Close()
+
+        // Negotiate a context with the chosen server
+        keyname, _, err := c.NegotiateContext("ns.example.com")
+        if err != nil {
+                panic(err)
+        }
+
+        client := &dns.Client{
+                Net:           "tcp",
+                TsigAlgorithm: map[string]*dns.TsigAlgorithm{tsig.GSS: {c.GenerateGSS, c.VerifyGSS}},
+                TsigSecret:    map[string]string{*keyname: ""},
+        }
+
+        // Do stuff here with the DNS client as usual
+
+        msg := new(dns.Msg)
+        msg.SetUpdate(dns.Fqdn("example.com"))
+
+        insert, err := dns.NewRR("test.example.com. 300 A 192.0.2.1")
+        if err != nil {
+                panic(err)
+        }
+        msg.Insert([]dns.RR{insert})
+
+        msg.SetTsig(*keyname, tsig.GSS, 300, time.Now().Unix())
+
+        addrs, err := net.LookupHost("ns.example.com")
+        if err != nil {
+                panic(err)
+        }
+
+        rr, _, err := client.Exchange(msg, net.JoinHostPort(addrs[0], "53"))
+        if err != nil {
+                panic(err)
+        }
+
+        if rr.Rcode != dns.RcodeSuccess {
+                fmt.Printf("DNS error: %s (%d)\n", dns.RcodeToString[rr.Rcode], rr.Rcode)
+        }
+
+        // Cleanup the context
+        err = c.DeleteContext(keyname)
+        if err != nil {
+                panic(err)
+        }
+
+Under the hood, GSSAPI is used on non-Windows platforms by locating and
+loading a native shared library whilst SSPI is used instead on Windows
+platforms.
+*/
 package gss
 
 import (
-	"encoding/hex"
 	"fmt"
-	"github.com/bodgit/tsig"
-	"github.com/hashicorp/go-multierror"
 	"github.com/miekg/dns"
 	"math/rand"
-	"net"
 	"time"
 )
 
@@ -22,90 +80,4 @@ func generateTKEYName(host string) string {
 func generateSPN(host string) string {
 
 	return fmt.Sprintf("DNS/%s", host)
-}
-
-func exchangeTKEY(host, keyname string, input []byte) ([]byte, error) {
-
-	client := &dns.Client{
-		Net:           "tcp",
-		TsigAlgorithm: map[string]*dns.TsigAlgorithm{tsig.Gss: {nil, nil}},
-		TsigSecret:    map[string]string{keyname: ""},
-	}
-
-	msg := &dns.Msg{
-		MsgHdr: dns.MsgHdr{
-			RecursionDesired: false,
-		},
-		Question: make([]dns.Question, 1),
-		Extra:    make([]dns.RR, 1),
-	}
-
-	msg.Question[0] = dns.Question{
-		Name:   keyname,
-		Qtype:  dns.TypeTKEY,
-		Qclass: dns.ClassANY,
-	}
-
-	msg.Id = dns.Id()
-
-	now := time.Now().Unix()
-
-	msg.Extra[0] = &dns.TKEY{
-		Hdr: dns.RR_Header{
-			Name:   keyname,
-			Rrtype: dns.TypeTKEY,
-			Class:  dns.ClassANY,
-			Ttl:    0,
-		},
-		Algorithm:  tsig.Gss,
-		Mode:       3,
-		Inception:  uint32(now),
-		Expiration: uint32(now),
-		KeySize:    uint16(len(input)),
-		Key:        hex.EncodeToString(input),
-	}
-
-	addrs, err := net.LookupHost(host)
-	if err != nil {
-		return nil, err
-	}
-
-	var rr *dns.Msg
-	var errs error
-	for _, addr := range addrs {
-		rr, _, err = client.Exchange(msg, net.JoinHostPort(addr, "53"))
-		if err == nil {
-			break
-		}
-		errs = multierror.Append(errs, err)
-	}
-
-	if rr == nil {
-		return nil, errs
-	}
-
-	if rr.Rcode != dns.RcodeSuccess {
-		return nil, fmt.Errorf("DNS error: %s (%d)", dns.RcodeToString[rr.Rcode], rr.Rcode)
-	}
-
-	// There should only ever be one answer RR of type TKEY
-	if len(rr.Answer) != 1 || rr.Answer[0].Header().Rrtype != dns.TypeTKEY {
-		return nil, fmt.Errorf("Received non-TKEY response")
-	}
-
-	if rr.Answer[0].Header().Name != keyname {
-		return nil, fmt.Errorf("TKEY name does not match")
-	}
-
-	t := rr.Answer[0].(*dns.TKEY)
-	if t.Error != 0 {
-		return nil, fmt.Errorf("TKEY error: %d", t.Error)
-	}
-
-	key, err := hex.DecodeString(t.Key)
-	if err != nil {
-		return nil, err
-	}
-
-	return key, nil
 }

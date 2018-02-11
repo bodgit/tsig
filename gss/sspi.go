@@ -10,20 +10,21 @@ import (
 	"github.com/hashicorp/go-multierror"
 	"github.com/miekg/dns"
 	"strings"
+	"time"
 )
 
-// Context maps the TKEY name to the context that negotiated it as
+// GSS maps the TKEY name to the context that negotiated it as
 // well as any other internal state.
-type Context struct {
+type GSS struct {
 	ctx map[string]*negotiate.ClientContext
 }
 
 // New performs any library initialization necessary.
 // It returns a context handle for any further functions along with any error
 // that occurred.
-func New() (*Context, error) {
+func New() (*GSS, error) {
 
-	c := &Context{
+	c := &GSS{
 		ctx: make(map[string]*negotiate.ClientContext),
 	}
 
@@ -33,7 +34,7 @@ func New() (*Context, error) {
 // Close deletes any active contexts and unloads any underlying libraries as
 // necessary.
 // It returns any error that occurred.
-func (c *Context) Close() error {
+func (c *GSS) Close() error {
 
 	var errs error
 	for k := range c.ctx {
@@ -43,16 +44,16 @@ func (c *Context) Close() error {
 	return errs
 }
 
-// GenerateGssTsig generates the TSIG MAC based on the established context.
+// GenerateGSS generates the TSIG MAC based on the established context.
 // It is not intended to be called directly but by the github/miekg/dns
 // package as an algorithm-specific callback.
 // It is called with the bytes of the DNS message, the algorithm name, the
 // TSIG name (which is the negotiated TKEY for this context) and the secret
 // (which is ignored).
 // It returns the bytes for the TSIG MAC and any error that occurred.
-func (c *Context) GenerateGssTsig(msg []byte, algorithm, name, secret string) ([]byte, error) {
+func (c *GSS) GenerateGSS(msg []byte, algorithm, name, secret string) ([]byte, error) {
 
-	if strings.ToLower(algorithm) != tsig.Gss {
+	if strings.ToLower(algorithm) != tsig.GSS {
 		return nil, dns.ErrKeyAlg
 	}
 
@@ -69,16 +70,16 @@ func (c *Context) GenerateGssTsig(msg []byte, algorithm, name, secret string) ([
 	return token, nil
 }
 
-// VerifyGssTsig verifies the TSIG MAC based on the established context.
+// VerifyGSS verifies the TSIG MAC based on the established context.
 // It is not intended to be called directly but by the github.com/miekg/dns
 // package as an algorithm-specific callback.
 // It is called with the bytes of the DNS message, the TSIG record, the TSIG
 // name (which is the negotiated TKEY for this context) and the secret (which
 // is ignored).
 // It returns any error that occurred.
-func (c *Context) VerifyGssTsig(stripped []byte, t *dns.TSIG, name, secret string) error {
+func (c *GSS) VerifyGSS(stripped []byte, t *dns.TSIG, name, secret string) error {
 
-	if strings.ToLower(t.Algorithm) != tsig.Gss {
+	if strings.ToLower(t.Algorithm) != tsig.GSS {
 		return dns.ErrKeyAlg
 	}
 
@@ -102,54 +103,70 @@ func (c *Context) VerifyGssTsig(stripped []byte, t *dns.TSIG, name, secret strin
 
 // NegotiateContext exchanges RFC 2930 TKEY records with the indicated DNS
 // server to establish a security context for further use.
-// It returns the negotiated TKEY name and any error that occurred.
-func (c *Context) NegotiateContext(host string) (*string, error) {
+// It returns the negotiated TKEY name, expiration time, and any error that
+// occurred.
+func (c *GSS) NegotiateContext(host string) (*string, *time.Time, error) {
 
 	keyname := generateTKEYName(host)
 
 	creds, err := negotiate.AcquireCurrentUserCredentials()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer creds.Release()
 
 	ctx, output, err := negotiate.NewClientContext(creds, generateSPN(host))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var completed bool
+	var tkey *dns.TKEY
 
 	for ok := false; !ok; ok = completed {
 
 		var errs error
 
-		input, err := exchangeTKEY(host, keyname, output)
+		// We don't care about non-TKEY answers, no additional RR's to send, and no signing
+		tkey, _, err = tsig.ExchangeTKEY(host, keyname, tsig.GSS, tsig.TkeyModeGSS, 3600, output, nil, nil, nil, nil)
 		if err != nil {
 			errs = multierror.Append(errs, err)
 			errs = multierror.Append(errs, ctx.Release())
-			return nil, errs
+			return nil, nil, errs
+		}
+
+		if tkey.Header().Name != keyname {
+			errs = multierror.Append(errs, fmt.Errorf("TKEY name does not match"))
+			errs = multierror.Append(errs, ctx.Release())
+			return nil, nil, errs
+		}
+
+		input, err := hex.DecodeString(tkey.Key)
+		if err != nil {
+			errs = multierror.Append(errs, err)
+			errs = multierror.Append(errs, ctx.Release())
+			return nil, nil, errs
 		}
 
 		completed, output, err = ctx.Update(input)
 		if err != nil {
 			errs = multierror.Append(errs, err)
 			errs = multierror.Append(errs, ctx.Release())
-			return nil, errs
+			return nil, nil, errs
 		}
 	}
 
-	// nsupdate(1) intentionally skips the TSIG on the TKEY response
+	expiry := time.Unix(int64(tkey.Expiration), 0)
 
 	c.ctx[keyname] = ctx
 
-	return &keyname, nil
+	return &keyname, &expiry, nil
 }
 
 // DeleteContext deletes the active security context associated with the given
 // TKEY name.
 // It returns any error that occurred.
-func (c *Context) DeleteContext(keyname *string) error {
+func (c *GSS) DeleteContext(keyname *string) error {
 
 	ctx, ok := c.ctx[*keyname]
 	if !ok {
