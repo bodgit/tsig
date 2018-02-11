@@ -239,8 +239,22 @@ func (c *DH) NegotiateKey(host, name, algorithm, mac string) (*string, *string, 
 		return nil, nil, nil, err
 	}
 
-	// FIXME
-	bkey, _ := base64.StdEncoding.DecodeString(keys[1].(*dns.KEY).PublicKey)
+	var bkey []byte
+	for _, k := range keys {
+		switch key := k.(type) {
+		case *dns.KEY:
+			if key.Header().Name != keyname && key.Algorithm == dns.DH {
+				bkey, err = base64.StdEncoding.DecodeString(key.PublicKey)
+				if err != nil {
+					return nil, nil, nil, err
+				}
+			}
+		}
+	}
+
+	if bkey == nil {
+		return nil, nil, nil, fmt.Errorf("No peer KEY record")
+	}
 
 	bdh, err := readDHKey(bkey)
 	if err != nil {
