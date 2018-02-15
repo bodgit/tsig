@@ -5,6 +5,8 @@ messages to Windows servers that have the zone require "Secure only" updates.
 
 Basic usage pattern for setting up a client:
 
+        host := "ns.example.com"
+
         c, err := gss.New()
         if err != nil {
                 panic(err)
@@ -12,7 +14,7 @@ Basic usage pattern for setting up a client:
         defer c.Close()
 
         // Negotiate a context with the chosen server
-        keyname, _, err := c.NegotiateContext("ns.example.com")
+        keyname, _, err := c.NegotiateContext(host)
         if err != nil {
                 panic(err)
         }
@@ -36,12 +38,7 @@ Basic usage pattern for setting up a client:
 
         msg.SetTsig(*keyname, tsig.GSS, 300, time.Now().Unix())
 
-        addrs, err := net.LookupHost("ns.example.com")
-        if err != nil {
-                panic(err)
-        }
-
-        rr, _, err := client.Exchange(msg, net.JoinHostPort(addrs[0], "53"))
+        rr, _, err := client.Exchange(msg, net.JoinHostPort(host, "53"))
         if err != nil {
                 panic(err)
         }

@@ -3,7 +3,6 @@ package tsig
 import (
 	"encoding/hex"
 	"fmt"
-	"github.com/hashicorp/go-multierror"
 	"github.com/miekg/dns"
 	"net"
 	"strings"
@@ -96,32 +95,14 @@ func ExchangeTKEY(host, keyname, algorithm string, mode uint16, lifetime uint32,
 
 	msg.Extra = append(msg.Extra, extra...)
 
-	addrs, err := net.LookupHost(host)
-	if err != nil {
-		return nil, nil, err
-	}
-
 	if strings.ToLower(algorithm) != GSS && tsigname != nil && tsigalgo != nil && tsigmac != nil {
 		client.TsigSecret = map[string]string{*tsigname: *tsigmac}
 		msg.SetTsig(*tsigname, *tsigalgo, 300, time.Now().Unix())
 	}
 
-	var rr *dns.Msg
-	var errs error
-	for _, addr := range addrs {
-
-		// Every time we send the message the TSIG RR gets dropped
-		copied := msg
-
-		rr, _, err = client.Exchange(copied, net.JoinHostPort(addr, "53"))
-		if err == nil || rr != nil {
-			break
-		}
-		errs = multierror.Append(errs, err)
-	}
-
-	if rr == nil {
-		return nil, nil, errs
+	rr, _, err := client.Exchange(msg, net.JoinHostPort(host, "53"))
+	if err != nil {
+		return nil, nil, err
 	}
 
 	if rr.Rcode != dns.RcodeSuccess {

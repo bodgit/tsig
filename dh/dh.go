@@ -4,6 +4,8 @@ github.com/miekg/dns package.
 
 Basic usage pattern for setting up a client:
 
+        host := "ns.example.com"
+
         c, err := dh.New()
         if err != nil {
                 panic(err)
@@ -11,7 +13,7 @@ Basic usage pattern for setting up a client:
         defer c.Close()
 
         // Negotiate a key with the chosen server
-        keyname, mac, _, err := c.NegotiateKey("ns.example.com", "tsig.example.com.", dns.HmacMD5, "k9uK5qsPfbBxvVuldwzYww==")
+        keyname, mac, _, err := c.NegotiateKey(host, "tsig.example.com.", dns.HmacMD5, "k9uK5qsPfbBxvVuldwzYww==")
         if err != nil {
                 panic(err)
         }
@@ -34,12 +36,7 @@ Basic usage pattern for setting up a client:
 
         msg.SetTsig(*keyname, dns.HmacMD5, 300, time.Now().Unix())
 
-        addrs, err := net.LookupHost("ns.example.com")
-        if err != nil {
-                panic(err)
-        }
-
-        rr, _, err := client.Exchange(msg, net.JoinHostPort(addrs[0], "53"))
+        rr, _, err := client.Exchange(msg, net.JoinHostPort(host, "53"))
         if err != nil {
                 panic(err)
         }
