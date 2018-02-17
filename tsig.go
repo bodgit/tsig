@@ -28,6 +28,21 @@ const (
 	TkeyModeDelete
 )
 
+func calculateTimes(mode uint16, lifetime uint32) (uint32, uint32, error) {
+
+	switch mode {
+	case TkeyModeDH:
+		fallthrough
+	case TkeyModeGSS:
+		now := time.Now().Unix()
+		return uint32(now), uint32(now) + lifetime, nil
+	case TkeyModeDelete:
+		return 0, 0, nil
+	default:
+		return 0, 0, fmt.Errorf("Unsupported TKEY mode %d", mode)
+	}
+}
+
 // ExchangeTKEY exchanges TKEY records with the given host using the given
 // key name, algorithm, mode, and lifetime with the provided input payload.
 // Any additional DNS records are also sent and the exchange can be secured
@@ -62,20 +77,9 @@ func ExchangeTKEY(host, keyname, algorithm string, mode uint16, lifetime uint32,
 
 	msg.Id = dns.Id()
 
-	now := time.Now().Unix()
-
-	var inception, expiration uint32
-	switch mode {
-	case TkeyModeDH:
-		fallthrough
-	case TkeyModeGSS:
-		inception = uint32(now)
-		expiration = uint32(now) + lifetime
-	case TkeyModeDelete:
-		inception = 0
-		expiration = 0
-	default:
-		return nil, nil, fmt.Errorf("Unsupported TKEY mode %d", mode)
+	inception, expiration, err := calculateTimes(mode, lifetime)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	msg.Extra[0] = &dns.TKEY{

@@ -179,6 +179,35 @@ func writeDHKey(key *dhkey) ([]byte, error) {
 	return w.Bytes(), nil
 }
 
+func computeMD5(nonce, secret []byte) []byte {
+
+	checksum := md5.Sum(append(nonce, secret...))
+
+	return checksum[:]
+}
+
+func computeDHKey(ourNonce, peerNonce, secret []byte) []byte {
+
+	operand := append(computeMD5(ourNonce, secret), computeMD5(peerNonce, secret)...)
+
+	var result []byte
+	if len(secret) > len(operand) {
+		result = make([]byte, len(secret))
+		copy(result, secret)
+		for i := 0; i < len(operand); i++ {
+			result[i] ^= operand[i]
+		}
+	} else {
+		result = make([]byte, len(operand))
+		copy(result, operand)
+		for i := 0; i < len(secret); i++ {
+			result[i] ^= secret[i]
+		}
+	}
+
+	return result
+}
+
 // NegotiateKey exchanges RFC 2930 TKEY records with the indicated DNS
 // server to establish a TSIG key for further using an existing TSIG key name,
 // algorithm and MAC.
@@ -272,28 +301,8 @@ func (c *DH) NegotiateKey(host, name, algorithm, mac string) (*string, *string, 
 		return nil, nil, nil, err
 	}
 
-	ac := md5.Sum(append(an, secret...))
-	bc := md5.Sum(append(bn, secret...))
-
-	operand := append(ac[:], bc[:]...)
-
-	var result []byte
-	if len(secret) > len(operand) {
-		result = make([]byte, len(secret))
-		copy(result, secret)
-		for i := 0; i < len(operand); i++ {
-			result[i] ^= operand[i]
-		}
-	} else {
-		result = make([]byte, len(operand))
-		copy(result, operand)
-		for i := 0; i < len(secret); i++ {
-			result[i] ^= secret[i]
-		}
-	}
-
 	lower := strings.ToLower(tkey.Header().Name)
-	key := base64.StdEncoding.EncodeToString(result)
+	key := base64.StdEncoding.EncodeToString(computeDHKey(an, bn, secret))
 	expiry := time.Unix(int64(tkey.Expiration), 0)
 
 	c.ctx[lower] = &context{
