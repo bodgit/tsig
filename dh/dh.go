@@ -61,14 +61,15 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"github.com/bodgit/tsig"
-	"github.com/enceve/crypto/dh"
-	"github.com/hashicorp/go-multierror"
-	"github.com/miekg/dns"
 	"io"
 	"math/big"
 	"strings"
 	"time"
+
+	"github.com/bodgit/tsig"
+	"github.com/enceve/crypto/dh"
+	"github.com/hashicorp/go-multierror"
+	"github.com/miekg/dns"
 )
 
 const (

@@ -5,12 +5,13 @@ package gss
 import (
 	"encoding/hex"
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/alexbrainman/sspi/negotiate"
 	"github.com/bodgit/tsig"
 	"github.com/hashicorp/go-multierror"
 	"github.com/miekg/dns"
-	"strings"
-	"time"
 )
 
 // GSS maps the TKEY name to the context that negotiated it as

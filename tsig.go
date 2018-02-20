@@ -3,10 +3,11 @@ package tsig
 import (
 	"encoding/hex"
 	"fmt"
-	"github.com/miekg/dns"
 	"net"
 	"strings"
 	"time"
+
+	"github.com/miekg/dns"
 )
 
 const (

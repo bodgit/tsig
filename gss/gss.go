@@ -61,9 +61,10 @@ package gss
 
 import (
 	"fmt"
-	"github.com/miekg/dns"
 	"math/rand"
 	"time"
+
+	"github.com/miekg/dns"
 )
 
 func generateTKEYName(host string) string {
