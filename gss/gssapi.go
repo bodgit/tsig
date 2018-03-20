@@ -160,7 +160,7 @@ func (c *GSS) NegotiateContext(host string) (*string, *time.Time, error) {
 			ctx, // nil initially
 			service,
 			c.GSS_C_NO_OID,
-			gssapi.GSS_C_DELEG_FLAG|gssapi.GSS_C_MUTUAL_FLAG|gssapi.GSS_C_REPLAY_FLAG|gssapi.GSS_C_SEQUENCE_FLAG|gssapi.GSS_C_INTEG_FLAG,
+			gssapi.GSS_C_MUTUAL_FLAG|gssapi.GSS_C_REPLAY_FLAG|gssapi.GSS_C_INTEG_FLAG,
 			0,
 			c.GSS_C_NO_CHANNEL_BINDINGS,
 			input)
