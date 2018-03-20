@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alexbrainman/sspi"
 	"github.com/alexbrainman/sspi/negotiate"
 	"github.com/bodgit/tsig"
 	"github.com/hashicorp/go-multierror"
@@ -102,19 +103,9 @@ func (c *GSS) VerifyGSS(stripped []byte, t *dns.TSIG, name, secret string) error
 	return nil
 }
 
-// NegotiateContext exchanges RFC 2930 TKEY records with the indicated DNS
-// server to establish a security context for further use.
-// It returns the negotiated TKEY name, expiration time, and any error that
-// occurred.
-func (c *GSS) NegotiateContext(host string) (*string, *time.Time, error) {
+func (c *GSS) negotiateContext(host string, creds *sspi.Credentials) (*string, *time.Time, error) {
 
 	keyname := generateTKEYName(host)
-
-	creds, err := negotiate.AcquireCurrentUserCredentials()
-	if err != nil {
-		return nil, nil, err
-	}
-	defer creds.Release()
 
 	ctx, output, err := negotiate.NewClientContext(creds, generateSPN(host))
 	if err != nil {
@@ -162,6 +153,37 @@ func (c *GSS) NegotiateContext(host string) (*string, *time.Time, error) {
 	c.ctx[keyname] = ctx
 
 	return &keyname, &expiry, nil
+}
+
+// NegotiateContext exchanges RFC 2930 TKEY records with the indicated DNS
+// server to establish a security context using the current user.
+// It returns the negotiated TKEY name, expiration time, and any error that
+// occurred.
+func (c *GSS) NegotiateContext(host string) (*string, *time.Time, error) {
+
+	creds, err := negotiate.AcquireCurrentUserCredentials()
+	if err != nil {
+		return nil, nil, err
+	}
+	defer creds.Release()
+
+	return c.negotiateContext(host, creds)
+}
+
+// NegotiateContextWithCredentials exchanges RFC 2930 TKEY records with the
+// indicated DNS server to establish a security context using the provided
+// credentials.
+// It returns the negotiated TKEY name, expiration time, and any error that
+// occurred.
+func (c *GSS) NegotiateContextWithCredentials(host, domain, username, password string) (*string, *time.Time, error) {
+
+	creds, err := negotiate.AcquireUserCredentials(domain, username, password)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer creds.Release()
+
+	return c.negotiateContext(host, creds)
 }
 
 // DeleteContext deletes the active security context associated with the given

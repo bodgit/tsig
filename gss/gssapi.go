@@ -132,7 +132,7 @@ func (c *GSS) VerifyGSS(stripped []byte, t *dns.TSIG, name, secret string) error
 }
 
 // NegotiateContext exchanges RFC 2930 TKEY records with the indicated DNS
-// server to establish a security context for further use.
+// server to establish a security context using the current user.
 // It returns the negotiated TKEY name, expiration time, and any error that
 // occurred.
 func (c *GSS) NegotiateContext(host string) (*string, *time.Time, error) {
@@ -212,6 +212,16 @@ func (c *GSS) NegotiateContext(host string) (*string, *time.Time, error) {
 	c.ctx[keyname] = ctx
 
 	return &keyname, &expiry, nil
+}
+
+// NegotiateContextWithCredentials exchanges RFC 2930 TKEY records with the
+// indicated DNS server to establish a security context using the provided
+// credentials.
+// It returns the negotiated TKEY name, expiration time, and any error that
+// occurred.
+func (c *GSS) NegotiateContextWithCredentials(host, domain, username, password string) (*string, *time.Time, error) {
+
+	return nil, nil, fmt.Errorf("Not currently possible")
 }
 
 // DeleteContext deletes the active security context associated with the given
