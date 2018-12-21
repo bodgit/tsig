@@ -16,16 +16,22 @@ import (
 	"gopkg.in/jcmturner/gokrb5.v6/client"
 	"gopkg.in/jcmturner/gokrb5.v6/config"
 	"gopkg.in/jcmturner/gokrb5.v6/credentials"
+	"gopkg.in/jcmturner/gokrb5.v6/crypto"
 	"gopkg.in/jcmturner/gokrb5.v6/gssapi"
 	"gopkg.in/jcmturner/gokrb5.v6/iana/keyusage"
 	"gopkg.in/jcmturner/gokrb5.v6/keytab"
+	"gopkg.in/jcmturner/gokrb5.v6/messages"
 	"gopkg.in/jcmturner/gokrb5.v6/types"
 )
+
+type context struct {
+	key types.EncryptionKey
+}
 
 // GSS maps the TKEY name to the context that negotiated it as
 // well as any other internal state.
 type GSS struct {
-	ctx map[string]types.EncryptionKey
+	ctx map[string]context
 }
 
 // New performs any library initialization necessary.
@@ -34,7 +40,7 @@ type GSS struct {
 func New() (*GSS, error) {
 
 	c := &GSS{
-		ctx: make(map[string]types.EncryptionKey),
+		ctx: make(map[string]context),
 	}
 
 	return c, nil
@@ -66,13 +72,18 @@ func (c *GSS) GenerateGSS(msg []byte, algorithm, name, secret string) ([]byte, e
 		return nil, dns.ErrKeyAlg
 	}
 
-	key, ok := c.ctx[name]
+	ctx, ok := c.ctx[name]
 	if !ok {
 		return nil, dns.ErrSecret
 	}
 
-	token, err := gssapi.NewInitiatorMICToken(msg, key)
-	if err != nil {
+	token := gssapi.MICToken{
+		Flags:     0x04, // AcceptorSubkey
+		SndSeqNum: 0,
+		Payload:   msg,
+	}
+
+	if err := token.ComputeAndSetChecksum(ctx.key, keyusage.GSSAPI_INITIATOR_SIGN); err != nil {
 		return nil, err
 	}
 
@@ -97,7 +108,7 @@ func (c *GSS) VerifyGSS(stripped []byte, t *dns.TSIG, name, secret string) error
 		return dns.ErrKeyAlg
 	}
 
-	key, ok := c.ctx[name]
+	ctx, ok := c.ctx[name]
 	if !ok {
 		return dns.ErrSecret
 	}
@@ -115,7 +126,7 @@ func (c *GSS) VerifyGSS(stripped []byte, t *dns.TSIG, name, secret string) error
 	token.Payload = stripped
 
 	// This is the actual verification bit
-	_, err = token.VerifyChecksum(key, keyusage.GSSAPI_ACCEPTOR_SIGN)
+	_, err = token.VerifyChecksum(ctx.key, keyusage.GSSAPI_ACCEPTOR_SIGN)
 	if err != nil {
 		return err
 	}
@@ -132,7 +143,7 @@ func (c *GSS) negotiateContext(host string, cl client.Client) (*string, *time.Ti
 		return nil, nil, err
 	}
 
-	apreq, err := gssapi.NewAPREQMechToken(*cl.Credentials, tkt, key, []int{gssapi.GSS_C_INTEG_FLAG}, []int{gssapi.GSS_C_MUTUAL_FLAG, gssapi.GSS_C_REPLAY_FLAG})
+	apreq, err := gssapi.NewAPREQMechToken(*cl.Credentials, tkt, key, []int{gssapi.GSS_C_INTEG_FLAG}, []int{gssapi.GSS_C_MUTUAL_FLAG})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -157,23 +168,36 @@ func (c *GSS) negotiateContext(host string, cl client.Client) (*string, *time.Ti
 		return nil, nil, err
 	}
 
-	var token gssapi.MechToken
-	err = token.Unmarshal(b)
+	var aprep gssapi.MechToken
+	err = aprep.Unmarshal(b)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	if token.IsKRBError() {
+	if aprep.IsKRBError() {
 		return nil, nil, fmt.Errorf("received Kerberos error")
 	}
 
-	if !token.IsAPRep() {
+	if !aprep.IsAPRep() {
 		return nil, nil, fmt.Errorf("didn't receive an AP_REP")
+	}
+
+	b, err = crypto.DecryptEncPart(aprep.APRep.EncPart, key, keyusage.AP_REP_ENCPART)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var payload messages.EncAPRepPart
+	err = payload.Unmarshal(b)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	expiry := time.Unix(int64(tkey.Expiration), 0)
 
-	c.ctx[keyname] = key
+	c.ctx[keyname] = context{
+		key: payload.Subkey,
+	}
 
 	return &keyname, &expiry, nil
 }
