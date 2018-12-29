@@ -78,12 +78,12 @@ func (c *GSS) GenerateGSS(msg []byte, algorithm, name, secret string) ([]byte, e
 	}
 
 	token := gssapi.MICToken{
-		Flags:     0x04, // AcceptorSubkey
+		Flags:     gssapi.MICTokenFlagAcceptorSubkey,
 		SndSeqNum: 0,
 		Payload:   msg,
 	}
 
-	if err := token.ComputeAndSetChecksum(ctx.key, keyusage.GSSAPI_INITIATOR_SIGN); err != nil {
+	if err := token.SetChecksum(ctx.key, keyusage.GSSAPI_INITIATOR_SIGN); err != nil {
 		return nil, err
 	}
 
