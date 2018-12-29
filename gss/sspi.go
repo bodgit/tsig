@@ -11,7 +11,7 @@ import (
 	"github.com/alexbrainman/sspi"
 	"github.com/alexbrainman/sspi/negotiate"
 	"github.com/bodgit/tsig"
-	"github.com/hashicorp/go-multierror"
+	multierror "github.com/hashicorp/go-multierror"
 	"github.com/miekg/dns"
 )
 
@@ -184,6 +184,16 @@ func (c *GSS) NegotiateContextWithCredentials(host, domain, username, password s
 	defer creds.Release()
 
 	return c.negotiateContext(host, creds)
+}
+
+// NegotiateContextWithKeytab exchanges RFC 2930 TKEY records with the
+// indicated DNS server to establish a security context using the provided
+// keytab.
+// It returns the negotiated TKEY name, expiration time, and any error that
+// occurred.
+func (c *GSS) NegotiateContextWithKeytab(host, domain, username, path string) (*string, *time.Time, error) {
+
+	return nil, nil, fmt.Errorf("not supported")
 }
 
 // DeleteContext deletes the active security context associated with the given
