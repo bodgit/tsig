@@ -137,9 +137,11 @@ func (c *GSS) VerifyGSS(stripped []byte, t *dns.TSIG, name, secret string) error
 // occurred.
 func (c *GSS) NegotiateContext(host string) (*string, *time.Time, error) {
 
-	keyname := generateTKEYName(host)
+	hostname, _ := tsig.SplitHostPort(host)
 
-	buffer, err := c.MakeBufferString(generateSPN(host))
+	keyname := generateTKEYName(hostname)
+
+	buffer, err := c.MakeBufferString(generateSPN(hostname))
 	if err != nil {
 		return nil, nil, err
 	}

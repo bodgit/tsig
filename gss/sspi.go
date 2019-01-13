@@ -105,9 +105,11 @@ func (c *GSS) VerifyGSS(stripped []byte, t *dns.TSIG, name, secret string) error
 
 func (c *GSS) negotiateContext(host string, creds *sspi.Credentials) (*string, *time.Time, error) {
 
-	keyname := generateTKEYName(host)
+	hostname, _ := tsig.SplitHostPort(host)
 
-	ctx, output, err := negotiate.NewClientContext(creds, generateSPN(host))
+	keyname := generateTKEYName(hostname)
+
+	ctx, output, err := negotiate.NewClientContext(creds, generateSPN(hostname))
 	if err != nil {
 		return nil, nil, err
 	}
