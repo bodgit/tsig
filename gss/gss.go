@@ -77,5 +77,9 @@ func generateTKEYName(host string) string {
 
 func generateSPN(host string) string {
 
+	if dns.IsFqdn(host) {
+		return fmt.Sprintf("DNS/%s", host[:len(host)-1])
+	}
+
 	return fmt.Sprintf("DNS/%s", host)
 }
