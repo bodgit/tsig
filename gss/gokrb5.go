@@ -162,7 +162,7 @@ func (c *GSS) negotiateContext(host string, cl client.Client) (*string, *time.Ti
 	}
 
 	if tkey.Header().Name != keyname {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("TKEY name does not match")
 	}
 
 	b, err = hex.DecodeString(tkey.Key)
