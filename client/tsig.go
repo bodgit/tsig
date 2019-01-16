@@ -18,6 +18,8 @@ import (
 type tsigAlgorithmGenerate func(msg []byte, algorithm, name, secret string) ([]byte, error)
 type tsigAlgorithmVerify func(msg []byte, tsig *dns.TSIG, name, secret string) error
 
+// TsigAlgorithm holds the two callbacks used to generate and verify the
+// transaction signature of a message.
 type TsigAlgorithm struct {
 	Generate tsigAlgorithmGenerate
 	Verify   tsigAlgorithmVerify
