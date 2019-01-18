@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	c "github.com/bodgit/tsig/client"
 	"github.com/miekg/dns"
 )
 
@@ -28,6 +29,11 @@ const (
 	// TkeyModeDelete is used for key deletion
 	TkeyModeDelete
 )
+
+// Exchanger is the interface a DNS client is expected to implement.
+type Exchanger interface {
+	Exchange(*dns.Msg, string) (*dns.Msg, time.Duration, error)
+}
 
 func calculateTimes(mode uint16, lifetime uint32) (uint32, uint32, error) {
 
@@ -57,25 +63,9 @@ func SplitHostPort(host string) (string, string) {
 	return hostname, port
 }
 
-// ExchangeTKEY exchanges TKEY records with the given host using the given
-// key name, algorithm, mode, and lifetime with the provided input payload.
-// Any additional DNS records are also sent and the exchange can be secured
-// with TSIG if a key name, algorithm and MAC are provided.
-// The TKEY record is returned along with any other DNS records in the
-// response along with any error that occurred.
-func ExchangeTKEY(host, keyname, algorithm string, mode uint16, lifetime uint32, input []byte, extra []dns.RR, tsigname, tsigalgo, tsigmac *string) (*dns.TKEY, []dns.RR, error) {
+func exchangeTKEY(client Exchanger, host, keyname, algorithm string, mode uint16, lifetime uint32, input []byte, extra []dns.RR, tsigname, tsigalgo, tsigmac *string) (*dns.TKEY, []dns.RR, error) {
 
 	hostname, port := SplitHostPort(host)
-
-	client := &dns.Client{
-		Net: "tcp",
-	}
-
-	// nsupdate(1) intentionally ignores the TSIG on the TKEY response for GSS
-	if strings.ToLower(algorithm) == GSS {
-		client.TsigAlgorithm = map[string]*dns.TsigAlgorithm{GSS: {nil, nil}}
-		client.TsigSecret = map[string]string{keyname: ""}
-	}
 
 	msg := &dns.Msg{
 		MsgHdr: dns.MsgHdr{
@@ -116,7 +106,6 @@ func ExchangeTKEY(host, keyname, algorithm string, mode uint16, lifetime uint32,
 	msg.Extra = append(msg.Extra, extra...)
 
 	if strings.ToLower(algorithm) != GSS && tsigname != nil && tsigalgo != nil && tsigmac != nil {
-		client.TsigSecret = map[string]string{*tsigname: *tsigmac}
 		msg.SetTsig(*tsigname, *tsigalgo, 300, time.Now().Unix())
 	}
 
@@ -156,4 +145,25 @@ func ExchangeTKEY(host, keyname, algorithm string, mode uint16, lifetime uint32,
 	}
 
 	return tkey, additional, nil
+}
+
+// ExchangeTKEY exchanges TKEY records with the given host using the given
+// key name, algorithm, mode, and lifetime with the provided input payload.
+// Any additional DNS records are also sent and the exchange can be secured
+// with TSIG if a key name, algorithm and MAC are provided.
+// The TKEY record is returned along with any other DNS records in the
+// response along with any error that occurred.
+func ExchangeTKEY(host, keyname, algorithm string, mode uint16, lifetime uint32, input []byte, extra []dns.RR, tsigname, tsigalgo, tsigmac *string) (*dns.TKEY, []dns.RR, error) {
+
+	client := c.Client{}
+
+	// nsupdate(1) intentionally ignores the TSIG on the TKEY response for GSS
+	if strings.ToLower(algorithm) == GSS {
+		client.TsigAlgorithm = map[string]*c.TsigAlgorithm{GSS: {Generate: nil, Verify: nil}}
+		client.TsigSecret = map[string]string{keyname: ""}
+	} else if tsigname != nil && tsigmac != nil {
+		client.TsigSecret = map[string]string{*tsigname: *tsigmac}
+	}
+
+	return exchangeTKEY(&client, host, keyname, algorithm, mode, lifetime, input, extra, tsigname, tsigalgo, tsigmac)
 }

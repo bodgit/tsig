@@ -47,8 +47,7 @@ func (c *GSS) Close() error {
 }
 
 // GenerateGSS generates the TSIG MAC based on the established context.
-// It is not intended to be called directly but by the github/miekg/dns
-// package as an algorithm-specific callback.
+// It is intended to be called as an algorithm-specific callback.
 // It is called with the bytes of the DNS message, the algorithm name, the
 // TSIG name (which is the negotiated TKEY for this context) and the secret
 // (which is ignored).
@@ -73,8 +72,7 @@ func (c *GSS) GenerateGSS(msg []byte, algorithm, name, secret string) ([]byte, e
 }
 
 // VerifyGSS verifies the TSIG MAC based on the established context.
-// It is not intended to be called directly but by the github.com/miekg/dns
-// package as an algorithm-specific callback.
+// It is intended to be called as an algorithm-specific callback.
 // It is called with the bytes of the DNS message, the TSIG record, the TSIG
 // name (which is the negotiated TKEY for this context) and the secret (which
 // is ignored).

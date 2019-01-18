@@ -1,61 +1,79 @@
 /*
-Package gss implements RFC 3645 GSS-TSIG functions for the
-github.com/miekg/dns package. This permits sending signed dynamic DNS update
-messages to Windows servers that have the zone require "Secure only" updates.
+Package gss implements RFC 3645 GSS-TSIG functions. This permits sending
+signed dynamic DNS update messages to Windows servers that have the zone
+require "Secure only" updates.
 
-Basic usage pattern for setting up a client:
+Example client:
 
-        host := "ns.example.com"
+        import (
+                "fmt"
+                "net"
+                "time"
 
-        c, err := gss.New()
-        if err != nil {
-                panic(err)
+                "github.com/bodgit/tsig"
+                c "github.com/bodgit/tsig/client"
+                "github.com/bodgit/tsig/gss"
+                "github.com/miekg/dns"
+        )
+
+        func main() {
+                host := "ns.example.com"
+
+                g, err := gss.New()
+                if err != nil {
+                        panic(err)
+                }
+                defer g.Close()
+
+                // Negotiate a context with the chosen server using the
+                // current user. See also g.NegotiateContextWithCredentials()
+                // and g.NegotiateContextWithKeytab() for alternatives
+                keyname, _, err := g.NegotiateContext(host)
+                if err != nil {
+                        panic(err)
+                }
+
+                client := c.Client{}
+                client.Net = "tcp"
+                client.TsigAlgorithm = map[string]*c.TsigAlgorithm{
+                        tsig.GSS: {
+                                Generate: g.GenerateGSS,
+                                Verify:   g.VerifyGSS,
+                        },
+                }
+                client.TsigSecret = map[string]string{*keyname: ""}
+
+                // Use the DNS client as normal
+
+                msg := new(dns.Msg)
+                msg.SetUpdate(dns.Fqdn("example.com"))
+
+                insert, err := dns.NewRR("test.example.com. 300 A 192.0.2.1")
+                if err != nil {
+                        panic(err)
+                }
+                msg.Insert([]dns.RR{insert})
+
+                msg.SetTsig(*keyname, tsig.GSS, 300, time.Now().Unix())
+
+                rr, _, err := client.Exchange(msg, net.JoinHostPort(host, "53"))
+                if err != nil {
+                        panic(err)
+                }
+
+                if rr.Rcode != dns.RcodeSuccess {
+                        fmt.Printf("DNS error: %s (%d)\n", dns.RcodeToString[rr.Rcode], rr.Rcode)
+                }
+
+                // Cleanup the context
+                err = g.DeleteContext(keyname)
+                if err != nil {
+                        panic(err)
+                }
         }
-        defer c.Close()
 
-        // Negotiate a context with the chosen server
-        keyname, _, err := c.NegotiateContext(host)
-        if err != nil {
-                panic(err)
-        }
-
-        client := &dns.Client{
-                Net:           "tcp",
-                TsigAlgorithm: map[string]*dns.TsigAlgorithm{tsig.GSS: {c.GenerateGSS, c.VerifyGSS}},
-                TsigSecret:    map[string]string{*keyname: ""},
-        }
-
-        // Do stuff here with the DNS client as usual
-
-        msg := new(dns.Msg)
-        msg.SetUpdate(dns.Fqdn("example.com"))
-
-        insert, err := dns.NewRR("test.example.com. 300 A 192.0.2.1")
-        if err != nil {
-                panic(err)
-        }
-        msg.Insert([]dns.RR{insert})
-
-        msg.SetTsig(*keyname, tsig.GSS, 300, time.Now().Unix())
-
-        rr, _, err := client.Exchange(msg, net.JoinHostPort(host, "53"))
-        if err != nil {
-                panic(err)
-        }
-
-        if rr.Rcode != dns.RcodeSuccess {
-                fmt.Printf("DNS error: %s (%d)\n", dns.RcodeToString[rr.Rcode], rr.Rcode)
-        }
-
-        // Cleanup the context
-        err = c.DeleteContext(keyname)
-        if err != nil {
-                panic(err)
-        }
-
-Under the hood, GSSAPI is used on non-Windows platforms by locating and
-loading a native shared library whilst SSPI is used instead on Windows
-platforms.
+Under the hood, GSSAPI is used on platforms other than Windows whilst Windows
+uses native SSPI which has a similar API.
 */
 package gss
 

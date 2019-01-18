@@ -1,54 +1,64 @@
 /*
-Package dh implements RFC 2930 Diffie-Hellman key exchange functions for the
-github.com/miekg/dns package.
+Package dh implements RFC 2930 Diffie-Hellman key exchange functions.
 
-Basic usage pattern for setting up a client:
+Example client:
 
-        host := "ns.example.com"
+        import (
+                "fmt"
+                "net"
+                "time"
 
-        c, err := dh.New()
-        if err != nil {
-                panic(err)
-        }
-        defer c.Close()
+                "github.com/bodgit/tsig/dh"
+                "github.com/miekg/dns"
+        )
 
-        // Negotiate a key with the chosen server
-        keyname, mac, _, err := c.NegotiateKey(host, "tsig.example.com.", dns.HmacMD5, "k9uK5qsPfbBxvVuldwzYww==")
-        if err != nil {
-                panic(err)
-        }
+        func main() {
+                host := "ns.example.com"
 
-        client := &dns.Client{
-                Net:        "tcp",
-                TsigSecret: map[string]string{*keyname: *mac},
-        }
+                d, err := dh.New()
+                if err != nil {
+                        panic(err)
+                }
+                defer d.Close()
 
-        // Do stuff here with the DNS client as usual
+                // Negotiate a key with the chosen server
+                keyname, mac, _, err := d.NegotiateKey(host, "tsig.example.com.", dns.HmacMD5, "k9uK5qsPfbBxvVuldwzYww==")
+                if err != nil {
+                        panic(err)
+                }
 
-        msg := new(dns.Msg)
-        msg.SetUpdate(dns.Fqdn("example.com"))
+                client := &dns.Client{
+                        Net:        "tcp",
+                        TsigSecret: map[string]string{*keyname: *mac},
+                }
 
-        insert, err := dns.NewRR("test.example.com. 300 A 192.0.2.1")
-        if err != nil {
-                panic(err)
-        }
-        msg.Insert([]dns.RR{insert})
+                // Use the DNS client as normal
 
-        msg.SetTsig(*keyname, dns.HmacMD5, 300, time.Now().Unix())
+                msg := new(dns.Msg)
+                msg.SetUpdate(dns.Fqdn("example.com"))
 
-        rr, _, err := client.Exchange(msg, net.JoinHostPort(host, "53"))
-        if err != nil {
-                panic(err)
-        }
+                insert, err := dns.NewRR("test.example.com. 300 A 192.0.2.1")
+                if err != nil {
+                        panic(err)
+                }
+                msg.Insert([]dns.RR{insert})
 
-        if rr.Rcode != dns.RcodeSuccess {
-                fmt.Printf("DNS error: %s (%d)\n", dns.RcodeToString[rr.Rcode], rr.Rcode)
-        }
+                msg.SetTsig(*keyname, dns.HmacMD5, 300, time.Now().Unix())
 
-        // Revoke the key
-        err = c.DeleteKey(keyname)
-        if err != nil {
-                panic(err)
+                rr, _, err := client.Exchange(msg, net.JoinHostPort(host, "53"))
+                if err != nil {
+                        panic(err)
+                }
+
+                if rr.Rcode != dns.RcodeSuccess {
+                        fmt.Printf("DNS error: %s (%d)\n", dns.RcodeToString[rr.Rcode], rr.Rcode)
+                }
+
+                // Revoke the key
+                err = d.DeleteKey(keyname)
+                if err != nil {
+                        panic(err)
+                }
         }
 */
 package dh
@@ -68,7 +78,7 @@ import (
 
 	"github.com/bodgit/tsig"
 	"github.com/enceve/crypto/dh"
-	"github.com/hashicorp/go-multierror"
+	multierror "github.com/hashicorp/go-multierror"
 	"github.com/miekg/dns"
 )
 
