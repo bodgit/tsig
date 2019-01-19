@@ -40,7 +40,7 @@ func TestCalculateTimes(t *testing.T) {
 	assert.Equal(t, uint32(0), t0)
 	assert.Equal(t, uint32(0), t1)
 
-	t0, t1, err = calculateTimes(TkeyModeServer, lifetime)
+	_, _, err = calculateTimes(TkeyModeServer, lifetime)
 	assert.NotNil(t, err)
 }
 
