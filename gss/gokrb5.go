@@ -21,13 +21,12 @@ import (
 	"gopkg.in/jcmturner/gokrb5.v6/iana/keyusage"
 	"gopkg.in/jcmturner/gokrb5.v6/keytab"
 	"gopkg.in/jcmturner/gokrb5.v6/messages"
-	"gopkg.in/jcmturner/gokrb5.v6/service"
 	"gopkg.in/jcmturner/gokrb5.v6/spnego"
 	"gopkg.in/jcmturner/gokrb5.v6/types"
 )
 
 type context struct {
-	client client.Client
+	client *client.Client
 	key    types.EncryptionKey
 }
 
@@ -135,7 +134,7 @@ func (c *GSS) VerifyGSS(stripped []byte, t *dns.TSIG, name, secret string) error
 	return nil
 }
 
-func (c *GSS) negotiateContext(host string, cl client.Client) (*string, *time.Time, error) {
+func (c *GSS) negotiateContext(host string, cl *client.Client) (*string, *time.Time, error) {
 
 	hostname, _ := tsig.SplitHostPort(host)
 
@@ -146,7 +145,7 @@ func (c *GSS) negotiateContext(host string, cl client.Client) (*string, *time.Ti
 		return nil, nil, err
 	}
 
-	apreq, err := spnego.NewKRB5TokenAPREQ(&cl, service.NewSettings(nil), tkt, key, []int{gssapi.ContextFlagInteg}, []int{gssapi.ContextFlagMutual})
+	apreq, err := spnego.NewKRB5TokenAPREQ(cl, tkt, key, []int{gssapi.ContextFlagInteg}, []int{gssapi.ContextFlagMutual})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -206,11 +205,11 @@ func (c *GSS) negotiateContext(host string, cl client.Client) (*string, *time.Ti
 	return &keyname, &expiry, nil
 }
 
-func loadCache() (credentials.CCache, error) {
+func loadCache() (*credentials.CCache, error) {
 
 	u, err := user.Current()
 	if err != nil {
-		return credentials.CCache{}, err
+		return nil, err
 	}
 
 	path := "/tmp/krb5cc_" + u.Uid
@@ -222,7 +221,7 @@ func loadCache() (credentials.CCache, error) {
 
 	cache, err := credentials.LoadCCache(path)
 	if err != nil {
-		return credentials.CCache{}, err
+		return nil, err
 	}
 
 	return cache, nil

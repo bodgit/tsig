@@ -18,4 +18,4 @@ require (
 	gopkg.in/jcmturner/rpc.v1 v1.1.0 // indirect
 )
 
-replace gopkg.in/jcmturner/gokrb5.v6 v6.1.1 => github.com/jcmturner/gokrb5 v6.1.2-0.20190119070821-ff049590ba5f+incompatible
+replace gopkg.in/jcmturner/gokrb5.v6 v6.1.1 => github.com/jcmturner/gokrb5 v6.1.2-0.20190120135749-818e5f445123+incompatible
