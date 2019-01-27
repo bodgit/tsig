@@ -13,19 +13,21 @@ import (
 	"github.com/bodgit/tsig"
 	multierror "github.com/hashicorp/go-multierror"
 	"github.com/miekg/dns"
-	"gopkg.in/jcmturner/gokrb5.v6/client"
-	"gopkg.in/jcmturner/gokrb5.v6/config"
-	"gopkg.in/jcmturner/gokrb5.v6/credentials"
-	"gopkg.in/jcmturner/gokrb5.v6/crypto"
-	"gopkg.in/jcmturner/gokrb5.v6/gssapi"
-	"gopkg.in/jcmturner/gokrb5.v6/iana/keyusage"
-	"gopkg.in/jcmturner/gokrb5.v6/keytab"
-	"gopkg.in/jcmturner/gokrb5.v6/messages"
-	"gopkg.in/jcmturner/gokrb5.v6/types"
+	"gopkg.in/jcmturner/gokrb5.v7/client"
+	"gopkg.in/jcmturner/gokrb5.v7/config"
+	"gopkg.in/jcmturner/gokrb5.v7/credentials"
+	"gopkg.in/jcmturner/gokrb5.v7/crypto"
+	"gopkg.in/jcmturner/gokrb5.v7/gssapi"
+	"gopkg.in/jcmturner/gokrb5.v7/iana/keyusage"
+	"gopkg.in/jcmturner/gokrb5.v7/keytab"
+	"gopkg.in/jcmturner/gokrb5.v7/messages"
+	"gopkg.in/jcmturner/gokrb5.v7/spnego"
+	"gopkg.in/jcmturner/gokrb5.v7/types"
 )
 
 type context struct {
-	key types.EncryptionKey
+	client *client.Client
+	key    types.EncryptionKey
 }
 
 // GSS maps the TKEY name to the context that negotiated it as
@@ -124,7 +126,7 @@ func (c *GSS) VerifyGSS(stripped []byte, t *dns.TSIG, name, secret string) error
 	token.Payload = stripped
 
 	// This is the actual verification bit
-	_, err = token.VerifyChecksum(ctx.key, keyusage.GSSAPI_ACCEPTOR_SIGN)
+	_, err = token.Verify(ctx.key, keyusage.GSSAPI_ACCEPTOR_SIGN)
 	if err != nil {
 		return err
 	}
@@ -132,7 +134,7 @@ func (c *GSS) VerifyGSS(stripped []byte, t *dns.TSIG, name, secret string) error
 	return nil
 }
 
-func (c *GSS) negotiateContext(host string, cl client.Client) (*string, *time.Time, error) {
+func (c *GSS) negotiateContext(host string, cl *client.Client) (*string, *time.Time, error) {
 
 	hostname, _ := tsig.SplitHostPort(host)
 
@@ -143,7 +145,7 @@ func (c *GSS) negotiateContext(host string, cl client.Client) (*string, *time.Ti
 		return nil, nil, err
 	}
 
-	apreq, err := gssapi.NewAPREQMechToken(*cl.Credentials, tkt, key, []int{gssapi.GSS_C_INTEG_FLAG}, []int{gssapi.GSS_C_MUTUAL_FLAG})
+	apreq, err := spnego.NewKRB5TokenAPREQ(cl, tkt, key, []int{gssapi.ContextFlagInteg}, []int{gssapi.ContextFlagMutual})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -168,7 +170,7 @@ func (c *GSS) negotiateContext(host string, cl client.Client) (*string, *time.Ti
 		return nil, nil, err
 	}
 
-	var aprep gssapi.MechToken
+	var aprep spnego.KRB5Token
 	err = aprep.Unmarshal(b)
 	if err != nil {
 		return nil, nil, err
@@ -196,17 +198,18 @@ func (c *GSS) negotiateContext(host string, cl client.Client) (*string, *time.Ti
 	expiry := time.Unix(int64(tkey.Expiration), 0)
 
 	c.ctx[keyname] = context{
-		key: payload.Subkey,
+		client: cl,
+		key:    payload.Subkey,
 	}
 
 	return &keyname, &expiry, nil
 }
 
-func loadCache() (credentials.CCache, error) {
+func loadCache() (*credentials.CCache, error) {
 
 	u, err := user.Current()
 	if err != nil {
-		return credentials.CCache{}, err
+		return nil, err
 	}
 
 	path := "/tmp/krb5cc_" + u.Uid
@@ -218,7 +221,7 @@ func loadCache() (credentials.CCache, error) {
 
 	cache, err := credentials.LoadCCache(path)
 	if err != nil {
-		return credentials.CCache{}, err
+		return nil, err
 	}
 
 	return cache, nil
@@ -261,20 +264,15 @@ func (c *GSS) NegotiateContext(host string) (*string, *time.Time, error) {
 		return nil, nil, err
 	}
 
-	cl, err := client.NewClientFromCCache(cache)
-	if err != nil {
-		return nil, nil, err
-	}
-
 	cfg, err := loadConfig()
 	if err != nil {
 		return nil, nil, err
 	}
 
-	cl.WithConfig(cfg)
-
-	// Windows
-	cl.GoKrb5Conf.DisablePAFXFast = true
+	cl, err := client.NewClientFromCCache(cache, cfg, client.DisablePAFXFAST(true))
+	if err != nil {
+		return nil, nil, err
+	}
 
 	return c.negotiateContext(host, cl)
 }
@@ -288,17 +286,12 @@ func (c *GSS) NegotiateContextWithCredentials(host, domain, username, password s
 
 	// Should I still initialise the credential cache?
 
-	cl := client.NewClientWithPassword(username, domain, password)
-
 	cfg, err := loadConfig()
 	if err != nil {
 		return nil, nil, err
 	}
 
-	cl.WithConfig(cfg)
-
-	// Windows
-	cl.GoKrb5Conf.DisablePAFXFast = true
+	cl := client.NewClientWithPassword(username, domain, password, cfg, client.DisablePAFXFAST(true))
 
 	err = cl.Login()
 	if err != nil {
@@ -322,17 +315,12 @@ func (c *GSS) NegotiateContextWithKeytab(host, domain, username, path string) (*
 		return nil, nil, err
 	}
 
-	cl := client.NewClientWithKeytab(username, domain, kt)
-
 	cfg, err := loadConfig()
 	if err != nil {
 		return nil, nil, err
 	}
 
-	cl.WithConfig(cfg)
-
-	// Windows
-	cl.GoKrb5Conf.DisablePAFXFast = true
+	cl := client.NewClientWithKeytab(username, domain, kt, cfg, client.DisablePAFXFAST(true))
 
 	err = cl.Login()
 	if err != nil {
@@ -347,10 +335,12 @@ func (c *GSS) NegotiateContextWithKeytab(host, domain, username, path string) (*
 // It returns any error that occurred.
 func (c *GSS) DeleteContext(keyname *string) error {
 
-	_, ok := c.ctx[*keyname]
+	ctx, ok := c.ctx[*keyname]
 	if !ok {
 		return fmt.Errorf("No such context")
 	}
+
+	ctx.client.Destroy()
 
 	delete(c.ctx, *keyname)
 
