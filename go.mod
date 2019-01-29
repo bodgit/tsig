@@ -14,6 +14,6 @@ require (
 	gopkg.in/jcmturner/aescts.v1 v1.0.1 // indirect
 	gopkg.in/jcmturner/dnsutils.v1 v1.0.1 // indirect
 	gopkg.in/jcmturner/goidentity.v3 v3.0.0 // indirect
-	gopkg.in/jcmturner/gokrb5.v7 v7.0.0
+	gopkg.in/jcmturner/gokrb5.v7 v7.0.2
 	gopkg.in/jcmturner/rpc.v1 v1.1.0 // indirect
 )
