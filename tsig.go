@@ -157,6 +157,9 @@ func ExchangeTKEY(host, keyname, algorithm string, mode uint16, lifetime uint32,
 
 	client := c.Client{}
 
+	// Use TCP regardless; TKEY queries can be in the range of ~ 1800 bytes
+	client.Net = "tcp"
+
 	// nsupdate(1) intentionally ignores the TSIG on the TKEY response for GSS
 	if strings.ToLower(algorithm) == GSS {
 		client.TsigAlgorithm = map[string]*c.TsigAlgorithm{GSS: {Generate: nil, Verify: nil}}
