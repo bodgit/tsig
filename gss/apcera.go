@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apcera/gssapi"
 	"github.com/bodgit/tsig"
 	multierror "github.com/hashicorp/go-multierror"
 	"github.com/miekg/dns"
+	"github.com/openshift/gssapi"
 )
 
 // GSS maps the TKEY name to the context that negotiated it as
