@@ -82,6 +82,7 @@ import (
 	"math/rand"
 	"time"
 
+	multierror "github.com/hashicorp/go-multierror"
 	"github.com/miekg/dns"
 )
 
@@ -100,4 +101,21 @@ func generateSPN(host string) string {
 	}
 
 	return fmt.Sprintf("DNS/%s", host)
+}
+
+func (c *GSS) close() error {
+
+	c.m.RLock()
+	keys := make([]string, 0, len(c.ctx))
+	for k := range c.ctx {
+		keys = append(keys, k)
+	}
+	c.m.RUnlock()
+
+	var errs error
+	for _, k := range keys {
+		errs = multierror.Append(errs, c.DeleteContext(&k))
+	}
+
+	return errs
 }

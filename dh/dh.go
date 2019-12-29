@@ -74,6 +74,7 @@ import (
 	"io"
 	"math/big"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bodgit/tsig"
@@ -103,6 +104,7 @@ type dhkey struct {
 // DH maps the TKEY name to the target host that negotiated it as
 // well as any other internal state.
 type DH struct {
+	m   sync.Mutex
 	ctx map[string]*context
 }
 
@@ -138,8 +140,15 @@ func New() (*DH, error) {
 // It returns any error that occurred.
 func (c *DH) Close() error {
 
-	var errs error
+	c.m.Lock()
+	keys := make([]string, 0, len(c.ctx))
 	for k := range c.ctx {
+		keys = append(keys, k)
+	}
+	c.m.Unlock()
+
+	var errs error
+	for _, k := range keys {
 		errs = multierror.Append(errs, c.DeleteKey(&k))
 	}
 
@@ -316,6 +325,9 @@ func (c *DH) NegotiateKey(host, name, algorithm, mac string) (*string, *string, 
 	key := base64.StdEncoding.EncodeToString(computeDHKey(an, bn, secret))
 	expiry := time.Unix(int64(tkey.Expiration), 0)
 
+	c.m.Lock()
+	defer c.m.Unlock()
+
 	c.ctx[lower] = &context{
 		host:      host,
 		algorithm: dns.HmacMD5,
@@ -328,6 +340,9 @@ func (c *DH) NegotiateKey(host, name, algorithm, mac string) (*string, *string, 
 // DeleteKey revokes the active key associated with the given TKEY name.
 // It returns any error that occurred.
 func (c *DH) DeleteKey(keyname *string) error {
+
+	c.m.Lock()
+	defer c.m.Unlock()
 
 	ctx, ok := c.ctx[*keyname]
 	if !ok {

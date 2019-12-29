@@ -8,10 +8,10 @@ import (
 	"os"
 	"os/user"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bodgit/tsig"
-	multierror "github.com/hashicorp/go-multierror"
 	"github.com/miekg/dns"
 	"gopkg.in/jcmturner/gokrb5.v7/client"
 	"gopkg.in/jcmturner/gokrb5.v7/config"
@@ -33,6 +33,7 @@ type context struct {
 // GSS maps the TKEY name to the context that negotiated it as
 // well as any other internal state.
 type GSS struct {
+	m   sync.RWMutex
 	ctx map[string]context
 }
 
@@ -53,12 +54,7 @@ func New() (*GSS, error) {
 // It returns any error that occurred.
 func (c *GSS) Close() error {
 
-	var errs error
-	for k := range c.ctx {
-		errs = multierror.Append(errs, c.DeleteContext(&k))
-	}
-
-	return errs
+	return c.close()
 }
 
 // GenerateGSS generates the TSIG MAC based on the established context.
@@ -72,6 +68,9 @@ func (c *GSS) GenerateGSS(msg []byte, algorithm, name, secret string) ([]byte, e
 	if strings.ToLower(algorithm) != tsig.GSS {
 		return nil, dns.ErrKeyAlg
 	}
+
+	c.m.RLock()
+	defer c.m.RUnlock()
 
 	ctx, ok := c.ctx[name]
 	if !ok {
@@ -107,6 +106,9 @@ func (c *GSS) VerifyGSS(stripped []byte, t *dns.TSIG, name, secret string) error
 	if strings.ToLower(t.Algorithm) != tsig.GSS {
 		return dns.ErrKeyAlg
 	}
+
+	c.m.RLock()
+	defer c.m.RUnlock()
 
 	ctx, ok := c.ctx[name]
 	if !ok {
@@ -196,6 +198,9 @@ func (c *GSS) negotiateContext(host string, cl *client.Client) (*string, *time.T
 	}
 
 	expiry := time.Unix(int64(tkey.Expiration), 0)
+
+	c.m.Lock()
+	defer c.m.Unlock()
 
 	c.ctx[keyname] = context{
 		client: cl,
@@ -334,6 +339,9 @@ func (c *GSS) NegotiateContextWithKeytab(host, domain, username, path string) (*
 // TKEY name.
 // It returns any error that occurred.
 func (c *GSS) DeleteContext(keyname *string) error {
+
+	c.m.Lock()
+	defer c.m.Unlock()
 
 	ctx, ok := c.ctx[*keyname]
 	if !ok {
