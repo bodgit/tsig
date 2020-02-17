@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bodgit/tsig"
@@ -17,8 +18,9 @@ import (
 // GSS maps the TKEY name to the context that negotiated it as
 // well as any other internal state.
 type GSS struct {
-	*gssapi.Lib // A handle to the underlying GSSAPI library.
-	ctx         map[string]*gssapi.CtxId
+	m   sync.RWMutex
+	lib *gssapi.Lib
+	ctx map[string]*gssapi.CtxId
 }
 
 // New performs any library initialization necessary.
@@ -32,7 +34,7 @@ func New() (*GSS, error) {
 	}
 
 	c := &GSS{
-		Lib: lib,
+		lib: lib,
 		ctx: make(map[string]*gssapi.CtxId),
 	}
 
@@ -44,12 +46,7 @@ func New() (*GSS, error) {
 // It returns any error that occurred.
 func (c *GSS) Close() error {
 
-	var errs error
-	for k := range c.ctx {
-		errs = multierror.Append(errs, c.DeleteContext(&k))
-	}
-
-	return multierror.Append(errs, c.Unload())
+	return multierror.Append(c.close(), c.lib.Unload())
 }
 
 // GenerateGSS generates the TSIG MAC based on the established context.
@@ -64,12 +61,15 @@ func (c *GSS) GenerateGSS(msg []byte, algorithm, name, secret string) ([]byte, e
 		return nil, dns.ErrKeyAlg
 	}
 
+	c.m.RLock()
+	defer c.m.RUnlock()
+
 	ctx, ok := c.ctx[name]
 	if !ok {
 		return nil, dns.ErrSecret
 	}
 
-	message, err := c.MakeBufferBytes(msg)
+	message, err := c.lib.MakeBufferBytes(msg)
 	if err != nil {
 		return nil, err
 	}
@@ -96,13 +96,16 @@ func (c *GSS) VerifyGSS(stripped []byte, t *dns.TSIG, name, secret string) error
 		return dns.ErrKeyAlg
 	}
 
+	c.m.RLock()
+	defer c.m.RUnlock()
+
 	ctx, ok := c.ctx[name]
 	if !ok {
 		return dns.ErrSecret
 	}
 
 	// Turn the TSIG-stripped message bytes into a *gssapi.Buffer
-	message, err := c.MakeBufferBytes(stripped)
+	message, err := c.lib.MakeBufferBytes(stripped)
 	if err != nil {
 		return err
 	}
@@ -114,7 +117,7 @@ func (c *GSS) VerifyGSS(stripped []byte, t *dns.TSIG, name, secret string) error
 	}
 
 	// Turn the TSIG MAC bytes into a *gssapi.Buffer
-	token, err := c.MakeBufferBytes(mac)
+	token, err := c.lib.MakeBufferBytes(mac)
 	if err != nil {
 		return err
 	}
@@ -139,13 +142,13 @@ func (c *GSS) NegotiateContext(host string) (*string, *time.Time, error) {
 
 	keyname := generateTKEYName(hostname)
 
-	buffer, err := c.MakeBufferString(generateSPN(hostname))
+	buffer, err := c.lib.MakeBufferString(generateSPN(hostname))
 	if err != nil {
 		return nil, nil, err
 	}
 	defer buffer.Release()
 
-	service, err := buffer.Name(c.GSS_KRB5_NT_PRINCIPAL_NAME)
+	service, err := buffer.Name(c.lib.GSS_KRB5_NT_PRINCIPAL_NAME)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -154,20 +157,20 @@ func (c *GSS) NegotiateContext(host string) (*string, *time.Time, error) {
 	var ctx *gssapi.CtxId
 	var tkey *dns.TKEY
 
-	for ok := true; ok; ok = c.LastStatus.Major.ContinueNeeded() {
-		nctx, _, output, _, _, err := c.InitSecContext(
-			c.GSS_C_NO_CREDENTIAL,
+	for ok := true; ok; ok = c.lib.LastStatus.Major.ContinueNeeded() {
+		nctx, _, output, _, _, err := c.lib.InitSecContext(
+			c.lib.GSS_C_NO_CREDENTIAL,
 			ctx, // nil initially
 			service,
-			c.GSS_C_NO_OID,
+			c.lib.GSS_C_NO_OID,
 			gssapi.GSS_C_MUTUAL_FLAG|gssapi.GSS_C_REPLAY_FLAG|gssapi.GSS_C_INTEG_FLAG,
 			0,
-			c.GSS_C_NO_CHANNEL_BINDINGS,
+			c.lib.GSS_C_NO_CHANNEL_BINDINGS,
 			input)
 		defer output.Release()
 		ctx = nctx
 		if err != nil {
-			if !c.LastStatus.Major.ContinueNeeded() {
+			if !c.lib.LastStatus.Major.ContinueNeeded() {
 				return nil, nil, err
 			}
 		} else {
@@ -198,7 +201,7 @@ func (c *GSS) NegotiateContext(host string) (*string, *time.Time, error) {
 			return nil, nil, errs
 		}
 
-		input, err = c.MakeBufferBytes(key)
+		input, err = c.lib.MakeBufferBytes(key)
 		if err != nil {
 			errs = multierror.Append(errs, err)
 			errs = multierror.Append(errs, ctx.DeleteSecContext())
@@ -208,6 +211,9 @@ func (c *GSS) NegotiateContext(host string) (*string, *time.Time, error) {
 	}
 
 	expiry := time.Unix(int64(tkey.Expiration), 0)
+
+	c.m.Lock()
+	defer c.m.Unlock()
 
 	c.ctx[keyname] = ctx
 
@@ -238,6 +244,9 @@ func (c *GSS) NegotiateContextWithKeytab(host, domain, username, path string) (*
 // TKEY name.
 // It returns any error that occurred.
 func (c *GSS) DeleteContext(keyname *string) error {
+
+	c.m.Lock()
+	defer c.m.Unlock()
 
 	ctx, ok := c.ctx[*keyname]
 	if !ok {

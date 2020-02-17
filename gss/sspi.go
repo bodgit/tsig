@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/alexbrainman/sspi"
@@ -18,6 +19,7 @@ import (
 // GSS maps the TKEY name to the context that negotiated it as
 // well as any other internal state.
 type GSS struct {
+	m   sync.RWMutex
 	ctx map[string]*negotiate.ClientContext
 }
 
@@ -38,12 +40,7 @@ func New() (*GSS, error) {
 // It returns any error that occurred.
 func (c *GSS) Close() error {
 
-	var errs error
-	for k := range c.ctx {
-		errs = multierror.Append(errs, c.DeleteContext(&k))
-	}
-
-	return errs
+	return c.close()
 }
 
 // GenerateGSS generates the TSIG MAC based on the established context.
@@ -57,6 +54,9 @@ func (c *GSS) GenerateGSS(msg []byte, algorithm, name, secret string) ([]byte, e
 	if strings.ToLower(algorithm) != tsig.GSS {
 		return nil, dns.ErrKeyAlg
 	}
+
+	c.m.RLock()
+	defer c.m.RUnlock()
 
 	ctx, ok := c.ctx[name]
 	if !ok {
@@ -82,6 +82,9 @@ func (c *GSS) VerifyGSS(stripped []byte, t *dns.TSIG, name, secret string) error
 	if strings.ToLower(t.Algorithm) != tsig.GSS {
 		return dns.ErrKeyAlg
 	}
+
+	c.m.RLock()
+	defer c.m.RUnlock()
 
 	ctx, ok := c.ctx[name]
 	if !ok {
@@ -150,6 +153,9 @@ func (c *GSS) negotiateContext(host string, creds *sspi.Credentials) (*string, *
 
 	expiry := time.Unix(int64(tkey.Expiration), 0)
 
+	c.m.Lock()
+	defer c.m.Unlock()
+
 	c.ctx[keyname] = ctx
 
 	return &keyname, &expiry, nil
@@ -200,6 +206,9 @@ func (c *GSS) NegotiateContextWithKeytab(host, domain, username, path string) (*
 // TKEY name.
 // It returns any error that occurred.
 func (c *GSS) DeleteContext(keyname *string) error {
+
+	c.m.Lock()
+	defer c.m.Unlock()
 
 	ctx, ok := c.ctx[*keyname]
 	if !ok {
