@@ -9,7 +9,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"hash"
-	"strings"
 	"time"
 
 	"github.com/miekg/dns"
@@ -61,21 +60,22 @@ type timerWireFmt struct {
 }
 
 func tsigGenerateHmac(msg []byte, algorithm, name, secret string) ([]byte, error) {
+	// If we barf here, the caller is to blame
 	rawsecret, err := fromBase64([]byte(secret))
 	if err != nil {
 		return nil, err
 	}
 
 	var h hash.Hash
-	switch strings.ToLower(algorithm) {
+	switch dns.CanonicalName(algorithm) {
 	case dns.HmacMD5:
-		h = hmac.New(md5.New, []byte(rawsecret))
+		h = hmac.New(md5.New, rawsecret)
 	case dns.HmacSHA1:
-		h = hmac.New(sha1.New, []byte(rawsecret))
+		h = hmac.New(sha1.New, rawsecret)
 	case dns.HmacSHA256:
-		h = hmac.New(sha256.New, []byte(rawsecret))
+		h = hmac.New(sha256.New, rawsecret)
 	case dns.HmacSHA512:
-		h = hmac.New(sha512.New, []byte(rawsecret))
+		h = hmac.New(sha512.New, rawsecret)
 	default:
 		return nil, dns.ErrKeyAlg
 	}
@@ -116,7 +116,10 @@ func TsigGenerateByAlgorithm(m *dns.Msg, cb tsigAlgorithmGenerate, name, secret,
 	if err != nil {
 		return nil, "", err
 	}
-	buf := tsigBuffer(mbuf, rr, requestMAC, timersOnly)
+	buf, err := tsigBuffer(mbuf, rr, requestMAC, timersOnly)
+	if err != nil {
+		return nil, "", err
+	}
 
 	t := new(TSIG)
 
@@ -125,22 +128,17 @@ func TsigGenerateByAlgorithm(m *dns.Msg, cb tsigAlgorithmGenerate, name, secret,
 		return nil, "", err
 	}
 
+	// Copy all TSIG fields except MAC and its size, which are filled using the computed digest.
+	t.TSIG = *rr
 	t.MAC = hex.EncodeToString(h)
 	t.MACSize = uint16(len(t.MAC) / 2) // Size is half!
 
-	t.Hdr = dns.RR_Header{Name: rr.Hdr.Name, Rrtype: dns.TypeTSIG, Class: dns.ClassANY, Ttl: 0}
-	t.Fudge = rr.Fudge
-	t.TimeSigned = rr.TimeSigned
-	t.Algorithm = rr.Algorithm
-	t.OrigId = m.Id
-
-	tbuf := make([]byte, t.len())
-	if off, err := dns.PackRR(t, tbuf, 0, nil, false); err == nil {
-		tbuf = tbuf[:off] // reset to actual size used
-	} else {
+	tbuf := make([]byte, dns.Len(t))
+	off, err := dns.PackRR(t, tbuf, 0, nil, false)
+	if err != nil {
 		return nil, "", err
 	}
-	mbuf = append(mbuf, tbuf...)
+	mbuf = append(mbuf, tbuf[:off]...)
 	// Update the ArCount directly in the buffer.
 	binary.BigEndian.PutUint16(mbuf[10:], uint16(len(m.Extra)+1))
 
@@ -159,7 +157,7 @@ func tsigVerifyHmac(msg []byte, tsig *dns.TSIG, name, secret string) error {
 	}
 
 	var h hash.Hash
-	switch strings.ToLower(tsig.Algorithm) {
+	switch dns.CanonicalName(tsig.Algorithm) {
 	case dns.HmacMD5:
 		h = hmac.New(md5.New, rawsecret)
 	case dns.HmacSHA1:
@@ -196,10 +194,19 @@ func TsigVerifyByAlgorithm(msg []byte, cb tsigAlgorithmVerify, name, secret, req
 		return err
 	}
 
-	buf := tsigBuffer(stripped, tsig, requestMAC, timersOnly)
+	buf, err := tsigBuffer(stripped, tsig, requestMAC, timersOnly)
+	if err != nil {
+		return err
+	}
+
+	if err := cb(buf, tsig, name, secret); err != nil {
+		return err
+	}
 
 	// Fudge factor works both ways. A message can arrive before it was signed because
 	// of clock skew.
+	// We check this after verifying the signature, following draft-ietf-dnsop-rfc2845bis
+	// instead of RFC2845, in order to prevent a security vulnerability as reported in CVE-2017-3142/3143.
 	now := uint64(time.Now().Unix())
 	ti := now - tsig.TimeSigned
 	if now < tsig.TimeSigned {
@@ -209,11 +216,11 @@ func TsigVerifyByAlgorithm(msg []byte, cb tsigAlgorithmVerify, name, secret, req
 		return dns.ErrTime
 	}
 
-	return cb(buf, tsig, name, secret)
+	return nil
 }
 
 // Create a wiredata buffer for the MAC calculation.
-func tsigBuffer(msgbuf []byte, rr *dns.TSIG, requestMAC string, timersOnly bool) []byte {
+func tsigBuffer(msgbuf []byte, rr *dns.TSIG, requestMAC string, timersOnly bool) ([]byte, error) {
 	var buf []byte
 	if rr.TimeSigned == 0 {
 		rr.TimeSigned = uint64(time.Now().Unix())
@@ -230,7 +237,10 @@ func tsigBuffer(msgbuf []byte, rr *dns.TSIG, requestMAC string, timersOnly bool)
 		m.MACSize = uint16(len(requestMAC) / 2)
 		m.MAC = requestMAC
 		buf = make([]byte, len(requestMAC)) // long enough
-		n, _ := packMacWire(m, buf)
+		n, err := packMacWire(m, buf)
+		if err != nil {
+			return nil, err
+		}
 		buf = buf[:n]
 	}
 
@@ -239,20 +249,26 @@ func tsigBuffer(msgbuf []byte, rr *dns.TSIG, requestMAC string, timersOnly bool)
 		tsig := new(timerWireFmt)
 		tsig.TimeSigned = rr.TimeSigned
 		tsig.Fudge = rr.Fudge
-		n, _ := packTimerWire(tsig, tsigvar)
+		n, err := packTimerWire(tsig, tsigvar)
+		if err != nil {
+			return nil, err
+		}
 		tsigvar = tsigvar[:n]
 	} else {
 		tsig := new(tsigWireFmt)
-		tsig.Name = strings.ToLower(rr.Hdr.Name)
+		tsig.Name = dns.CanonicalName(rr.Hdr.Name)
 		tsig.Class = dns.ClassANY
 		tsig.Ttl = rr.Hdr.Ttl
-		tsig.Algorithm = strings.ToLower(rr.Algorithm)
+		tsig.Algorithm = dns.CanonicalName(rr.Algorithm)
 		tsig.TimeSigned = rr.TimeSigned
 		tsig.Fudge = rr.Fudge
 		tsig.Error = rr.Error
 		tsig.OtherLen = rr.OtherLen
 		tsig.OtherData = rr.OtherData
-		n, _ := packTsigWire(tsig, tsigvar)
+		n, err := packTsigWire(tsig, tsigvar)
+		if err != nil {
+			return nil, err
+		}
 		tsigvar = tsigvar[:n]
 	}
 
@@ -262,7 +278,7 @@ func tsigBuffer(msgbuf []byte, rr *dns.TSIG, requestMAC string, timersOnly bool)
 	} else {
 		buf = append(msgbuf, tsigvar...)
 	}
-	return buf
+	return buf, nil
 }
 
 // Strip the TSIG from the raw message.

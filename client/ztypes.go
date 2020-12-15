@@ -6,10 +6,10 @@ import "github.com/miekg/dns"
 
 func (rr *TSIG) Header() *dns.RR_Header { return &rr.Hdr }
 
-func (rr *TSIG) len() int {
-	l := len(rr.Hdr.Name) + 1
-	l += 10
-	l += len(rr.Algorithm) + 1
+func (rr *TSIG) len(off int, compression map[string]struct{}) int {
+	l := domainNameLen(rr.Hdr.Name, off, compression, true)
+	l += 10 // rrtype(2) + class(2) + ttl(4) + rdlength(2)
+	l += domainNameLen(rr.Algorithm, off+l, compression, false)
 	l += 6 // TimeSigned
 	l += 2 // Fudge
 	l += 2 // MACSize
