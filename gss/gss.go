@@ -103,6 +103,14 @@ func generateSPN(host string) string {
 	return fmt.Sprintf("DNS/%s", host)
 }
 
+func (c *GSS) Generate(msg []byte, tsig *dns.TSIG) ([]byte, error) {
+	return c.GenerateGSS(msg, tsig.Algorithm, tsig.Hdr.Name, "")
+}
+
+func (c *GSS) Verify(stripped []byte, tsig *dns.TSIG) error {
+	return c.VerifyGSS(stripped, tsig, tsig.Hdr.Name, "")
+}
+
 func (c *GSS) close() error {
 
 	c.m.RLock()
