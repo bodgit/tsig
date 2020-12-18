@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/bodgit/tsig"
+	"github.com/jcmturner/gokrb5/iana/flags"
 	"github.com/jcmturner/gokrb5/v8/client"
 	"github.com/jcmturner/gokrb5/v8/config"
 	"github.com/jcmturner/gokrb5/v8/credentials"
@@ -28,6 +29,7 @@ import (
 type context struct {
 	client *client.Client
 	key    types.EncryptionKey
+	seq    uint64
 }
 
 // GSS maps the TKEY name to the context that negotiated it as
@@ -79,7 +81,7 @@ func (c *GSS) GenerateGSS(msg []byte, algorithm, name, secret string) ([]byte, e
 
 	token := gssapi.MICToken{
 		Flags:     gssapi.MICTokenFlagAcceptorSubkey,
-		SndSeqNum: 0,
+		SndSeqNum: ctx.seq,
 		Payload:   msg,
 	}
 
@@ -91,6 +93,8 @@ func (c *GSS) GenerateGSS(msg []byte, algorithm, name, secret string) ([]byte, e
 	if err != nil {
 		return nil, err
 	}
+
+	ctx.seq++
 
 	return b, nil
 }
@@ -127,6 +131,8 @@ func (c *GSS) VerifyGSS(stripped []byte, t *dns.TSIG, name, secret string) error
 	}
 	token.Payload = stripped
 
+	// FIXME should keep track of token.SndSeqNum for replay protection
+
 	// This is the actual verification bit
 	_, err = token.Verify(ctx.key, keyusage.GSSAPI_ACCEPTOR_SIGN)
 	if err != nil {
@@ -147,8 +153,12 @@ func (c *GSS) negotiateContext(host string, cl *client.Client) (*string, *time.T
 		return nil, nil, err
 	}
 
-	apreq, err := spnego.NewKRB5TokenAPREQ(cl, tkt, key, []int{gssapi.ContextFlagInteg}, []int{gssapi.ContextFlagMutual})
+	apreq, err := spnego.NewKRB5TokenAPREQ(cl, tkt, key, []int{gssapi.ContextFlagMutual, gssapi.ContextFlagReplay, gssapi.ContextFlagInteg}, []int{flags.APOptionMutualRequired})
 	if err != nil {
+		return nil, nil, err
+	}
+
+	if err = apreq.APReq.DecryptAuthenticator(key); err != nil {
 		return nil, nil, err
 	}
 
@@ -197,6 +207,8 @@ func (c *GSS) negotiateContext(host string, cl *client.Client) (*string, *time.T
 		return nil, nil, err
 	}
 
+	// FIXME payload.SequenceNumber is the first sequence number expected from the server
+
 	expiry := time.Unix(int64(tkey.Expiration), 0)
 
 	c.m.Lock()
@@ -205,6 +217,7 @@ func (c *GSS) negotiateContext(host string, cl *client.Client) (*string, *time.T
 	c.ctx[keyname] = context{
 		client: cl,
 		key:    payload.Subkey,
+		seq:    uint64(apreq.APReq.Authenticator.SeqNumber),
 	}
 
 	return &keyname, &expiry, nil
