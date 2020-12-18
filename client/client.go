@@ -4,7 +4,9 @@ package client
 
 import (
 	"crypto/tls"
+	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/miekg/dns"
@@ -57,33 +59,22 @@ func (c *Client) Dial(address string) (conn *Conn, err error) {
 	// create a new dialer with the appropriate timeout
 	var d net.Dialer
 	if c.Dialer == nil {
-		d = net.Dialer{}
+		d = net.Dialer{Timeout: c.getTimeoutForRequest(c.dialTimeout())}
 	} else {
-		d = net.Dialer(*c.Dialer)
+		d = *c.Dialer
 	}
-	d.Timeout = c.getTimeoutForRequest(c.writeTimeout())
 
-	network := "udp"
-	useTLS := false
-
-	switch c.Net {
-	case "tcp-tls":
-		network = "tcp"
-		useTLS = true
-	case "tcp4-tls":
-		network = "tcp4"
-		useTLS = true
-	case "tcp6-tls":
-		network = "tcp6"
-		useTLS = true
-	default:
-		if c.Net != "" {
-			network = c.Net
-		}
+	network := c.Net
+	if network == "" {
+		network = "udp"
 	}
+
+	useTLS := strings.HasPrefix(network, "tcp") && strings.HasSuffix(network, "-tls")
 
 	conn = new(Conn)
 	if useTLS {
+		network = strings.TrimSuffix(network, "-tls")
+
 		conn.Conn.Conn, err = tls.DialWithDialer(&d, network, address, c.TLSConfig)
 	} else {
 		conn.Conn.Conn, err = d.Dial(network, address)
@@ -91,6 +82,7 @@ func (c *Client) Dial(address string) (conn *Conn, err error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return conn, nil
 }
 
@@ -108,37 +100,47 @@ func (c *Client) Dial(address string) (conn *Conn, err error) {
 // of 512 bytes
 // To specify a local address or a timeout, the caller has to set the `Client.Dialer`
 // attribute appropriately
+
 func (c *Client) Exchange(m *dns.Msg, address string) (r *dns.Msg, rtt time.Duration, err error) {
-	if !c.SingleInflight {
-		return c.exchange(m, address)
-	}
-
-	t := "nop"
-	if t1, ok := dns.TypeToString[m.Question[0].Qtype]; ok {
-		t = t1
-	}
-	cl := "nop"
-	if cl1, ok := dns.ClassToString[m.Question[0].Qclass]; ok {
-		cl = cl1
-	}
-	r, rtt, err, shared := c.group.Do(m.Question[0].Name+t+cl, func() (*dns.Msg, time.Duration, error) {
-		return c.exchange(m, address)
-	})
-	if r != nil && shared {
-		r = r.Copy()
-	}
-	return r, rtt, err
-}
-
-func (c *Client) exchange(m *dns.Msg, a string) (r *dns.Msg, rtt time.Duration, err error) {
-	var co *Conn
-
-	co, err = c.Dial(a)
+	co, err := c.Dial(address)
 
 	if err != nil {
 		return nil, 0, err
 	}
 	defer co.Close()
+	return c.ExchangeWithConn(m, co)
+}
+
+// ExchangeWithConn has the same behavior as Exchange, just with a predetermined connection
+// that will be used instead of creating a new one.
+// Usage pattern with a *dns.Client:
+//	c := new(dns.Client)
+//	// connection management logic goes here
+//
+//	conn := c.Dial(address)
+//	in, rtt, err := c.ExchangeWithConn(message, conn)
+//
+//  This allows users of the library to implement their own connection management,
+//  as opposed to Exchange, which will always use new connections and incur the added overhead
+//  that entails when using "tcp" and especially "tcp-tls" clients.
+func (c *Client) ExchangeWithConn(m *dns.Msg, conn *Conn) (r *dns.Msg, rtt time.Duration, err error) {
+	if !c.SingleInflight {
+		return c.exchange(m, conn)
+	}
+
+	q := m.Question[0]
+	key := fmt.Sprintf("%s:%d:%d", q.Name, q.Qtype, q.Qclass)
+	r, rtt, err, shared := c.group.Do(key, func() (*dns.Msg, time.Duration, error) {
+		return c.exchange(m, conn)
+	})
+	if r != nil && shared {
+		r = r.Copy()
+	}
+
+	return r, rtt, err
+}
+
+func (c *Client) exchange(m *dns.Msg, co *Conn) (r *dns.Msg, rtt time.Duration, err error) {
 
 	opt := m.IsEdns0()
 	// If EDNS0 is used use that for size.
@@ -233,10 +235,8 @@ func (co *Conn) WriteMsg(m *dns.Msg) (err error) {
 	if err != nil {
 		return err
 	}
-	if _, err = co.Write(out); err != nil {
-		return err
-	}
-	return nil
+	_, err = co.Write(out)
+	return err
 }
 
 // Return the appropriate timeout for a specific request
