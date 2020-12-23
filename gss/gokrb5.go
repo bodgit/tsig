@@ -4,7 +4,7 @@ package gss
 
 import (
 	"encoding/hex"
-	"fmt"
+	"errors"
 	"os"
 	"os/user"
 	"strings"
@@ -172,7 +172,7 @@ func (c *GSS) negotiateContext(host string, cl *client.Client) (*string, *time.T
 	}
 
 	if tkey.Header().Name != keyname {
-		return nil, nil, fmt.Errorf("TKEY name does not match")
+		return nil, nil, errors.New("TKEY name does not match")
 	}
 
 	if b, err = hex.DecodeString(tkey.Key); err != nil {
@@ -185,11 +185,11 @@ func (c *GSS) negotiateContext(host string, cl *client.Client) (*string, *time.T
 	}
 
 	if aprep.IsKRBError() {
-		return nil, nil, fmt.Errorf("received Kerberos error")
+		return nil, nil, errors.New("received Kerberos error")
 	}
 
 	if !aprep.IsAPRep() {
-		return nil, nil, fmt.Errorf("didn't receive an AP_REP")
+		return nil, nil, errors.New("didn't receive an AP_REP")
 	}
 
 	if b, err = crypto.DecryptEncPart(aprep.APRep.EncPart, key, keyusage.AP_REP_ENCPART); err != nil {
@@ -350,7 +350,7 @@ func (c *GSS) DeleteContext(keyname *string) error {
 
 	ctx, ok := c.ctx[*keyname]
 	if !ok {
-		return fmt.Errorf("No such context")
+		return errors.New("No such context")
 	}
 
 	ctx.client.Destroy()

@@ -4,8 +4,8 @@ package gss
 
 import (
 	"encoding/hex"
-	"fmt"
 	"strings"
+	"errors"
 	"sync"
 	"time"
 
@@ -187,7 +187,7 @@ func (c *GSS) NegotiateContext(host string) (*string, *time.Time, error) {
 		}
 
 		if tkey.Header().Name != keyname {
-			errs = multierror.Append(errs, fmt.Errorf("TKEY name does not match"))
+			errs = multierror.Append(errs, errors.New("TKEY name does not match"))
 			errs = multierror.Append(errs, ctx.DeleteSecContext())
 			return nil, nil, errs
 		}
@@ -224,7 +224,7 @@ func (c *GSS) NegotiateContext(host string) (*string, *time.Time, error) {
 // occurred.
 func (c *GSS) NegotiateContextWithCredentials(host, domain, username, password string) (*string, *time.Time, error) {
 
-	return nil, nil, fmt.Errorf("not supported")
+	return nil, nil, errors.New("not supported")
 }
 
 // NegotiateContextWithKeytab exchanges RFC 2930 TKEY records with the
@@ -234,7 +234,7 @@ func (c *GSS) NegotiateContextWithCredentials(host, domain, username, password s
 // occurred.
 func (c *GSS) NegotiateContextWithKeytab(host, domain, username, path string) (*string, *time.Time, error) {
 
-	return nil, nil, fmt.Errorf("not supported")
+	return nil, nil, errors.New("not supported")
 }
 
 // DeleteContext deletes the active security context associated with the given
@@ -247,7 +247,7 @@ func (c *GSS) DeleteContext(keyname *string) error {
 
 	ctx, ok := c.ctx[*keyname]
 	if !ok {
-		return fmt.Errorf("No such context")
+		return errors.New("No such context")
 	}
 
 	if err := ctx.DeleteSecContext(); err != nil {

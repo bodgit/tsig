@@ -70,6 +70,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -295,7 +296,7 @@ func (c *DH) NegotiateKey(host, name, algorithm, mac string) (*string, *string, 
 	}
 
 	if bkey == nil {
-		return nil, nil, nil, fmt.Errorf("No peer KEY record")
+		return nil, nil, nil, errors.New("No peer KEY record")
 	}
 
 	bdh, err := readDHKey(bkey)
@@ -342,7 +343,7 @@ func (c *DH) DeleteKey(keyname *string) error {
 
 	ctx, ok := c.ctx[*keyname]
 	if !ok {
-		return fmt.Errorf("No such context")
+		return errors.New("No such context")
 	}
 
 	// Delete the key, signing the query with the key itself
