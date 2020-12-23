@@ -169,8 +169,7 @@ func readDHKey(raw []byte) (*dhkey, error) {
 		}
 
 		*f = make([]byte, len)
-		_, err = io.ReadFull(r, *f)
-		if err != nil {
+		if _, err = io.ReadFull(r, *f); err != nil {
 			return nil, err
 		}
 	}
@@ -190,8 +189,7 @@ func writeDHKey(key *dhkey) ([]byte, error) {
 			return nil, err
 		}
 
-		_, err = w.Write(*f)
-		if err != nil {
+		if _, err = w.Write(*f); err != nil {
 			return nil, err
 		}
 	}
@@ -260,8 +258,7 @@ func (c *DH) NegotiateKey(host, name, algorithm, mac string) (*string, *string, 
 
 	// Generate our nonce
 	an := make([]byte, 16) // FIXME I suspect it just is
-	_, err = rand.Read(an)
-	if err != nil {
+	if _, err = rand.Read(an); err != nil {
 		return nil, nil, nil, err
 	}
 
@@ -290,8 +287,7 @@ func (c *DH) NegotiateKey(host, name, algorithm, mac string) (*string, *string, 
 		switch key := k.(type) {
 		case *dns.KEY:
 			if key.Header().Name != keyname && key.Algorithm == dns.DH {
-				bkey, err = base64.StdEncoding.DecodeString(key.PublicKey)
-				if err != nil {
+				if bkey, err = base64.StdEncoding.DecodeString(key.PublicKey); err != nil {
 					return nil, nil, nil, err
 				}
 			}
@@ -350,8 +346,7 @@ func (c *DH) DeleteKey(keyname *string) error {
 	}
 
 	// Delete the key, signing the query with the key itself
-	_, _, err := tsig.ExchangeTKEY(ctx.host, *keyname, ctx.algorithm, tsig.TkeyModeDelete, 0, nil, nil, keyname, &ctx.algorithm, &ctx.mac)
-	if err != nil {
+	if _, _, err := tsig.ExchangeTKEY(ctx.host, *keyname, ctx.algorithm, tsig.TkeyModeDelete, 0, nil, nil, keyname, &ctx.algorithm, &ctx.mac); err != nil {
 		return err
 	}
 

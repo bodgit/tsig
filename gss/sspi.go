@@ -96,8 +96,7 @@ func (c *GSS) VerifyGSS(stripped []byte, t *dns.TSIG, name, secret string) error
 		return err
 	}
 
-	_, err = ctx.VerifySignature(stripped, token, 0)
-	if err != nil {
+	if _, err = ctx.VerifySignature(stripped, token, 0); err != nil {
 		return err
 	}
 
@@ -123,8 +122,7 @@ func (c *GSS) negotiateContext(host string, creds *sspi.Credentials) (*string, *
 		var errs error
 
 		// We don't care about non-TKEY answers, no additional RR's to send, and no signing
-		tkey, _, err = tsig.ExchangeTKEY(host, keyname, tsig.GSS, tsig.TkeyModeGSS, 3600, output, nil, nil, nil, nil)
-		if err != nil {
+		if tkey, _, err = tsig.ExchangeTKEY(host, keyname, tsig.GSS, tsig.TkeyModeGSS, 3600, output, nil, nil, nil, nil); err != nil {
 			errs = multierror.Append(errs, err)
 			errs = multierror.Append(errs, ctx.Release())
 			return nil, nil, errs
@@ -143,8 +141,7 @@ func (c *GSS) negotiateContext(host string, creds *sspi.Credentials) (*string, *
 			return nil, nil, errs
 		}
 
-		completed, output, err = ctx.Update(input)
-		if err != nil {
+		if completed, output, err = ctx.Update(input); err != nil {
 			errs = multierror.Append(errs, err)
 			errs = multierror.Append(errs, ctx.Release())
 			return nil, nil, errs
@@ -215,8 +212,7 @@ func (c *GSS) DeleteContext(keyname *string) error {
 		return fmt.Errorf("No such context")
 	}
 
-	err := ctx.Release()
-	if err != nil {
+	if err := ctx.Release(); err != nil {
 		return err
 	}
 

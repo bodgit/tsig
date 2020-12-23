@@ -124,8 +124,7 @@ func (c *GSS) VerifyGSS(stripped []byte, t *dns.TSIG, name, secret string) error
 	defer token.Release()
 
 	// This is the actual verification bit
-	_, err = ctx.VerifyMIC(message, token)
-	if err != nil {
+	if _, err = ctx.VerifyMIC(message, token); err != nil {
 		return err
 	}
 
@@ -181,8 +180,7 @@ func (c *GSS) NegotiateContext(host string) (*string, *time.Time, error) {
 		var errs error
 
 		// We don't care about non-TKEY answers, no additional RR's to send, and no signing
-		tkey, _, err = tsig.ExchangeTKEY(host, keyname, tsig.GSS, tsig.TkeyModeGSS, 3600, output.Bytes(), nil, nil, nil, nil)
-		if err != nil {
+		if tkey, _, err = tsig.ExchangeTKEY(host, keyname, tsig.GSS, tsig.TkeyModeGSS, 3600, output.Bytes(), nil, nil, nil, nil); err != nil {
 			errs = multierror.Append(errs, err)
 			errs = multierror.Append(errs, ctx.DeleteSecContext())
 			return nil, nil, errs
@@ -201,8 +199,7 @@ func (c *GSS) NegotiateContext(host string) (*string, *time.Time, error) {
 			return nil, nil, errs
 		}
 
-		input, err = c.lib.MakeBufferBytes(key)
-		if err != nil {
+		if input, err = c.lib.MakeBufferBytes(key); err != nil {
 			errs = multierror.Append(errs, err)
 			errs = multierror.Append(errs, ctx.DeleteSecContext())
 			return nil, nil, errs
@@ -253,8 +250,7 @@ func (c *GSS) DeleteContext(keyname *string) error {
 		return fmt.Errorf("No such context")
 	}
 
-	err := ctx.DeleteSecContext()
-	if err != nil {
+	if err := ctx.DeleteSecContext(); err != nil {
 		return err
 	}
 

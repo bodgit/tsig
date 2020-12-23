@@ -125,8 +125,7 @@ func (c *GSS) VerifyGSS(stripped []byte, t *dns.TSIG, name, secret string) error
 	}
 
 	var token gssapi.MICToken
-	err = token.Unmarshal(mac, true)
-	if err != nil {
+	if err = token.Unmarshal(mac, true); err != nil {
 		return err
 	}
 	token.Payload = stripped
@@ -134,8 +133,7 @@ func (c *GSS) VerifyGSS(stripped []byte, t *dns.TSIG, name, secret string) error
 	// FIXME should keep track of token.SndSeqNum for replay protection
 
 	// This is the actual verification bit
-	_, err = token.Verify(ctx.key, keyusage.GSSAPI_ACCEPTOR_SIGN)
-	if err != nil {
+	if _, err = token.Verify(ctx.key, keyusage.GSSAPI_ACCEPTOR_SIGN); err != nil {
 		return err
 	}
 
@@ -177,14 +175,12 @@ func (c *GSS) negotiateContext(host string, cl *client.Client) (*string, *time.T
 		return nil, nil, fmt.Errorf("TKEY name does not match")
 	}
 
-	b, err = hex.DecodeString(tkey.Key)
-	if err != nil {
+	if b, err = hex.DecodeString(tkey.Key); err != nil {
 		return nil, nil, err
 	}
 
 	var aprep spnego.KRB5Token
-	err = aprep.Unmarshal(b)
-	if err != nil {
+	if err = aprep.Unmarshal(b); err != nil {
 		return nil, nil, err
 	}
 
@@ -196,14 +192,12 @@ func (c *GSS) negotiateContext(host string, cl *client.Client) (*string, *time.T
 		return nil, nil, fmt.Errorf("didn't receive an AP_REP")
 	}
 
-	b, err = crypto.DecryptEncPart(aprep.APRep.EncPart, key, keyusage.AP_REP_ENCPART)
-	if err != nil {
+	if b, err = crypto.DecryptEncPart(aprep.APRep.EncPart, key, keyusage.AP_REP_ENCPART); err != nil {
 		return nil, nil, err
 	}
 
 	var payload messages.EncAPRepPart
-	err = payload.Unmarshal(b)
-	if err != nil {
+	if err = payload.Unmarshal(b); err != nil {
 		return nil, nil, err
 	}
 
@@ -311,8 +305,7 @@ func (c *GSS) NegotiateContextWithCredentials(host, domain, username, password s
 
 	cl := client.NewWithPassword(username, domain, password, cfg, client.DisablePAFXFAST(true))
 
-	err = cl.Login()
-	if err != nil {
+	if err = cl.Login(); err != nil {
 		return nil, nil, err
 	}
 
@@ -340,8 +333,7 @@ func (c *GSS) NegotiateContextWithKeytab(host, domain, username, path string) (*
 
 	cl := client.NewWithKeytab(username, domain, kt, cfg, client.DisablePAFXFAST(true))
 
-	err = cl.Login()
-	if err != nil {
+	if err = cl.Login(); err != nil {
 		return nil, nil, err
 	}
 
