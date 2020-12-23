@@ -3,5 +3,5 @@ language: go
 env:
   - GO111MODULE=on
 go:
-  - 1.11.x
+  - 1.15.x
 script: go test -v ./...
