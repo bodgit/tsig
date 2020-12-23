@@ -4,7 +4,6 @@ package gss
 
 import (
 	"encoding/hex"
-	"strings"
 	"errors"
 	"sync"
 	"time"
@@ -51,7 +50,7 @@ func (c *GSS) Close() error {
 // It returns the bytes for the TSIG MAC and any error that occurred.
 func (c *GSS) GenerateGSS(msg []byte, algorithm, name, secret string) ([]byte, error) {
 
-	if strings.ToLower(algorithm) != tsig.GSS {
+	if dns.CanonicalName(algorithm) != tsig.GSS {
 		return nil, dns.ErrKeyAlg
 	}
 
@@ -79,7 +78,7 @@ func (c *GSS) GenerateGSS(msg []byte, algorithm, name, secret string) ([]byte, e
 // It returns any error that occurred.
 func (c *GSS) VerifyGSS(stripped []byte, t *dns.TSIG, name, secret string) error {
 
-	if strings.ToLower(t.Algorithm) != tsig.GSS {
+	if dns.CanonicalName(t.Algorithm) != tsig.GSS {
 		return dns.ErrKeyAlg
 	}
 
