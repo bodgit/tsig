@@ -28,38 +28,32 @@ import (
         "net"
         "time"
 
-        "github.com/bodgit/tsig"
-        c "github.com/bodgit/tsig/client"
         "github.com/bodgit/tsig/gss"
         "github.com/miekg/dns"
 )
 
 func main() {
+        dnsClient := new(dns.Client)
+        dnsClient.Net = "tcp"
+
+        gssClient, err := gss.NewClient(dnsClient)
+        if err != nil {
+                panic(err)
+        }
+        defer gssClient.Close()
+
         host := "ns.example.com"
 
-        g, err := gss.New()
-        if err != nil {
-                panic(err)
-        }
-        defer g.Close()
-
         // Negotiate a context with the chosen server using the
-        // current user. See also g.NegotiateContextWithCredentials()
-        // and g.NegotiateContextWithKeytab() for alternatives
-        keyname, _, err := g.NegotiateContext(host)
+        // current user. See also gssClient.NegotiateContextWithCredentials()
+        // and gssClient.NegotiateContextWithKeytab() for alternatives
+        keyname, _, err := gssClient.NegotiateContext(host)
         if err != nil {
                 panic(err)
         }
 
-        client := c.Client{}
-        client.Net = "tcp"
-        client.TsigAlgorithm = map[string]*c.TsigAlgorithm{
-                tsig.GSS: {
-                        Generate: g.GenerateGSS,
-                        Verify:   g.VerifyGSS,
-                },
-        }
-        client.TsigSecret = map[string]string{*keyname: ""}
+        dnsClient.TsigGSS = gssClient
+        dnsClient.TsigSecret = map[string]string{keyname: ""}
 
         // Use the DNS client as normal
 
@@ -72,9 +66,9 @@ func main() {
         }
         msg.Insert([]dns.RR{insert})
 
-        msg.SetTsig(*keyname, tsig.GSS, 300, time.Now().Unix())
+        msg.SetTsig(keyname, dns.GSS, 300, time.Now().Unix())
 
-        rr, _, err := client.Exchange(msg, net.JoinHostPort(host, "53"))
+        rr, _, err := dnsClient.Exchange(msg, net.JoinHostPort(host, "53"))
         if err != nil {
                 panic(err)
         }
@@ -84,15 +78,9 @@ func main() {
         }
 
         // Cleanup the context
-        err = g.DeleteContext(keyname)
+        err = gssClient.DeleteContext(keyname)
         if err != nil {
                 panic(err)
         }
 }
 ```
-
-Note that it is necessary for the package to ship its own DNS client rather
-than use the one provided in the github/com/miekg/dns package as it needs to
-permit the additional TSIG algorithms however it behaves mostly the same and
-exports the same `Exchange()` method so they can be use interchangeably in
-code with a suitable interface, (see `tsig.Exchanger` for an example).

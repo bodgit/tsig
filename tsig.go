@@ -4,16 +4,10 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net"
-	"strings"
 	"time"
 
-	c "github.com/bodgit/tsig/client"
+	"github.com/jinzhu/copier"
 	"github.com/miekg/dns"
-)
-
-const (
-	// GSS is the RFC 3645 defined algorithm name
-	GSS = "gss-tsig."
 )
 
 const (
@@ -50,6 +44,27 @@ func calculateTimes(mode uint16, lifetime uint32) (uint32, uint32, error) {
 	}
 }
 
+func CopyDNSClient(dnsClient *dns.Client) (*dns.Client, error) {
+
+	client := new(dns.Client)
+	if err := copier.Copy(client, dnsClient); err != nil {
+		return nil, err
+	}
+
+	switch client.Net {
+	case "tcp", "tcp4", "tcp6":
+		break
+	case "ip4", "udp4":
+		client.Net = "tcp4"
+	case "ip6", "udp6":
+		client.Net = "tcp6"
+	default:
+		return nil, fmt.Errorf("unsupported transport '%s'", client.Net)
+	}
+
+	return client, nil
+}
+
 // SplitHostPort attempts to split a "hostname:port" string and return them
 // as separate strings. If the host cannot be split then it is returned with
 // the default DNS port "53".
@@ -63,16 +78,23 @@ func SplitHostPort(host string) (string, string) {
 	return hostname, port
 }
 
-func exchangeTKEY(client Exchanger, host, keyname, algorithm string, mode uint16, lifetime uint32, input []byte, extra []dns.RR, tsigname, tsigalgo, tsigmac *string) (*dns.TKEY, []dns.RR, error) {
+// ExchangeTKEY exchanges TKEY records with the given host using the given
+// key name, algorithm, mode, and lifetime with the provided input payload.
+// Any additional DNS records are also sent and the exchange can be secured
+// with TSIG if a key name, algorithm and MAC are provided.
+// The TKEY record is returned along with any other DNS records in the
+// response along with any error that occurred.
+func ExchangeTKEY(client Exchanger, host, keyname, algorithm string, mode uint16, lifetime uint32, input []byte, extra []dns.RR, tsigname, tsigalgo, tsigmac string) (*dns.TKEY, []dns.RR, error) {
 
 	hostname, port := SplitHostPort(host)
 
 	msg := &dns.Msg{
 		MsgHdr: dns.MsgHdr{
+			Id:               dns.Id(),
 			RecursionDesired: false,
 		},
 		Question: make([]dns.Question, 1),
-		Extra:    make([]dns.RR, 1),
+		Extra:    make([]dns.RR, 1+len(extra)),
 	}
 
 	msg.Question[0] = dns.Question{
@@ -80,8 +102,6 @@ func exchangeTKEY(client Exchanger, host, keyname, algorithm string, mode uint16
 		Qtype:  dns.TypeTKEY,
 		Qclass: dns.ClassANY,
 	}
-
-	msg.Id = dns.Id()
 
 	inception, expiration, err := calculateTimes(mode, lifetime)
 	if err != nil {
@@ -105,8 +125,8 @@ func exchangeTKEY(client Exchanger, host, keyname, algorithm string, mode uint16
 
 	msg.Extra = append(msg.Extra, extra...)
 
-	if strings.ToLower(algorithm) != GSS && tsigname != nil && tsigalgo != nil && tsigmac != nil {
-		msg.SetTsig(*tsigname, *tsigalgo, 300, time.Now().Unix())
+	if dns.CanonicalName(algorithm) != dns.GSS && tsigname != "" && tsigalgo != "" && tsigmac != "" {
+		msg.SetTsig(tsigname, tsigalgo, 300, time.Now().Unix())
 	}
 
 	rr, _, err := client.Exchange(msg, net.JoinHostPort(hostname, port))
@@ -145,28 +165,4 @@ func exchangeTKEY(client Exchanger, host, keyname, algorithm string, mode uint16
 	}
 
 	return tkey, additional, nil
-}
-
-// ExchangeTKEY exchanges TKEY records with the given host using the given
-// key name, algorithm, mode, and lifetime with the provided input payload.
-// Any additional DNS records are also sent and the exchange can be secured
-// with TSIG if a key name, algorithm and MAC are provided.
-// The TKEY record is returned along with any other DNS records in the
-// response along with any error that occurred.
-func ExchangeTKEY(host, keyname, algorithm string, mode uint16, lifetime uint32, input []byte, extra []dns.RR, tsigname, tsigalgo, tsigmac *string) (*dns.TKEY, []dns.RR, error) {
-
-	client := c.Client{}
-
-	// Use TCP regardless; TKEY queries can be in the range of ~ 1800 bytes
-	client.Net = "tcp"
-
-	// nsupdate(1) intentionally ignores the TSIG on the TKEY response for GSS
-	if strings.ToLower(algorithm) == GSS {
-		client.TsigAlgorithm = map[string]*c.TsigAlgorithm{GSS: {Generate: nil, Verify: nil}}
-		client.TsigSecret = map[string]string{keyname: ""}
-	} else if tsigname != nil && tsigmac != nil {
-		client.TsigSecret = map[string]string{*tsigname: *tsigmac}
-	}
-
-	return exchangeTKEY(&client, host, keyname, algorithm, mode, lifetime, input, extra, tsigname, tsigalgo, tsigmac)
 }

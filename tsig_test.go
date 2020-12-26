@@ -66,7 +66,7 @@ func TestExchangeTKEY(t *testing.T) {
 			Class:  dns.ClassANY,
 			Ttl:    0,
 		},
-		Algorithm:  GSS,
+		Algorithm:  dns.GSS,
 		Mode:       TkeyModeGSS,
 		Inception:  now,
 		Expiration: now + 3600,
@@ -83,9 +83,9 @@ func TestExchangeTKEY(t *testing.T) {
 		lifetime           uint32
 		input              []byte
 		extra              []dns.RR
-		tsigname           *string
-		tsigalgo           *string
-		tsigmac            *string
+		tsigname           string
+		tsigalgo           string
+		tsigmac            string
 		expectedTKEY       *dns.TKEY
 		expectedAdditional []dns.RR
 		expectedErr        error
@@ -102,7 +102,7 @@ func TestExchangeTKEY(t *testing.T) {
 			},
 			host:               "ns.example.com.",
 			keyname:            "test.example.com.",
-			algorithm:          GSS,
+			algorithm:          dns.GSS,
 			mode:               TkeyModeGSS,
 			lifetime:           3600,
 			expectedTKEY:       goodTKEY,
@@ -112,7 +112,7 @@ func TestExchangeTKEY(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		tkey, additional, err := exchangeTKEY(&c.client, c.host, c.keyname, c.algorithm, c.mode, c.lifetime, c.input, c.extra, c.tsigname, c.tsigalgo, c.tsigmac)
+		tkey, additional, err := ExchangeTKEY(&c.client, c.host, c.keyname, c.algorithm, c.mode, c.lifetime, c.input, c.extra, c.tsigname, c.tsigalgo, c.tsigmac)
 		assert.Equal(t, c.expectedTKEY, tkey)
 		assert.Equal(t, c.expectedAdditional, additional)
 		assert.Equal(t, c.expectedErr, err)
