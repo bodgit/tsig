@@ -5,6 +5,7 @@ package gss
 import (
 	"encoding/hex"
 	"errors"
+	"net"
 	"sync"
 	"time"
 
@@ -141,7 +142,10 @@ func (c *Client) Verify(stripped []byte, t *dns.TSIG) error {
 // occurred.
 func (c *Client) NegotiateContext(host string) (string, time.Time, error) {
 
-	hostname, _ := tsig.SplitHostPort(host)
+	hostname, _, err := net.SplitHostPort(host)
+	if err != nil {
+		return "", time.Time{}, err
+	}
 
 	keyname := generateTKEYName(hostname)
 

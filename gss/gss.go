@@ -7,7 +7,6 @@ Example client:
 
         import (
                 "fmt"
-                "net"
                 "time"
 
                 "github.com/bodgit/tsig/gss"
@@ -24,7 +23,7 @@ Example client:
                 }
                 defer gssClient.Close()
 
-                host := "ns.example.com"
+                host := "ns.example.com:53"
 
                 // Negotiate a context with the chosen server using the
                 // current user. See also
@@ -51,7 +50,7 @@ Example client:
 
                 msg.SetTsig(keyname, dns.GSS, 300, time.Now().Unix())
 
-                rr, _, err := dnsClient.Exchange(msg, net.JoinHostPort(host, "53"))
+                rr, _, err := dnsClient.Exchange(msg, host)
                 if err != nil {
                         panic(err)
                 }

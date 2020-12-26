@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"math"
+	"net"
 	"os"
 	"os/user"
 	"strings"
@@ -234,7 +235,10 @@ func (c *Client) Verify(stripped []byte, t *dns.TSIG) error {
 
 func (c *Client) negotiateContext(host string, cl *client.Client) (string, time.Time, error) {
 
-	hostname, _ := tsig.SplitHostPort(host)
+	hostname, _, err := net.SplitHostPort(host)
+	if err != nil {
+		return "", time.Time{}, err
+	}
 
 	keyname := generateTKEYName(hostname)
 

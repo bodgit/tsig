@@ -3,7 +3,6 @@ package tsig
 import (
 	"encoding/hex"
 	"fmt"
-	"net"
 	"time"
 
 	"github.com/jinzhu/copier"
@@ -65,19 +64,6 @@ func CopyDNSClient(dnsClient *dns.Client) (*dns.Client, error) {
 	return client, nil
 }
 
-// SplitHostPort attempts to split a "hostname:port" string and return them
-// as separate strings. If the host cannot be split then it is returned with
-// the default DNS port "53".
-func SplitHostPort(host string) (string, string) {
-
-	hostname, port, err := net.SplitHostPort(host)
-	if err != nil {
-		return host, "53"
-	}
-
-	return hostname, port
-}
-
 // ExchangeTKEY exchanges TKEY records with the given host using the given
 // key name, algorithm, mode, and lifetime with the provided input payload.
 // Any additional DNS records are also sent and the exchange can be secured
@@ -85,8 +71,6 @@ func SplitHostPort(host string) (string, string) {
 // The TKEY record is returned along with any other DNS records in the
 // response along with any error that occurred.
 func ExchangeTKEY(client Exchanger, host, keyname, algorithm string, mode uint16, lifetime uint32, input []byte, extra []dns.RR, tsigname, tsigalgo, tsigmac string) (*dns.TKEY, []dns.RR, error) {
-
-	hostname, port := SplitHostPort(host)
 
 	msg := &dns.Msg{
 		MsgHdr: dns.MsgHdr{
@@ -129,7 +113,7 @@ func ExchangeTKEY(client Exchanger, host, keyname, algorithm string, mode uint16
 		msg.SetTsig(tsigname, tsigalgo, 300, time.Now().Unix())
 	}
 
-	rr, _, err := client.Exchange(msg, net.JoinHostPort(hostname, port))
+	rr, _, err := client.Exchange(msg, host)
 	if err != nil {
 		return nil, nil, err
 	}

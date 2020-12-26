@@ -44,17 +44,6 @@ func TestCalculateTimes(t *testing.T) {
 	assert.NotNil(t, err)
 }
 
-func TestSplitHostPort(t *testing.T) {
-
-	host, port := SplitHostPort("host.example.com.")
-	assert.Equal(t, "host.example.com.", host)
-	assert.Equal(t, "53", port)
-
-	host, port = SplitHostPort("host.example.com.:8053")
-	assert.Equal(t, "host.example.com.", host)
-	assert.Equal(t, "8053", port)
-}
-
 func TestExchangeTKEY(t *testing.T) {
 
 	now := uint32(time.Now().Unix())

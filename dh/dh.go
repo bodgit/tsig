@@ -5,7 +5,6 @@ Example client:
 
         import (
                 "fmt"
-                "net"
                 "time"
 
                 "github.com/bodgit/tsig/dh"
@@ -23,7 +22,7 @@ Example client:
                 }
                 defer dhClient.Close()
 
-                host := "ns.example.com"
+                host := "ns.example.com:53"
 
                 // Negotiate a key with the chosen server
                 keyname, mac, _, err := dhClient.NegotiateKey(host, "tsig.example.com.", dns.HmacMD5, "k9uK5qsPfbBxvVuldwzYww==")
@@ -46,7 +45,7 @@ Example client:
 
                 msg.SetTsig(keyname, dns.HmacMD5, 300, time.Now().Unix())
 
-                rr, _, err := dnsClient.Exchange(msg, net.JoinHostPort(host, "53"))
+                rr, _, err := dnsClient.Exchange(msg, host)
                 if err != nil {
                         panic(err)
                 }
