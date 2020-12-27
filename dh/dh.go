@@ -79,6 +79,7 @@ import (
 	"time"
 
 	"github.com/bodgit/tsig"
+	"github.com/bodgit/tsig/internal/util"
 	"github.com/enceve/crypto/dh"
 	multierror "github.com/hashicorp/go-multierror"
 	"github.com/miekg/dns"
@@ -130,7 +131,7 @@ func dhGroup(group int) (*dh.Group, error) {
 // that occurred.
 func NewClient(dnsClient *dns.Client) (*Client, error) {
 
-	client, err := tsig.CopyDNSClient(dnsClient)
+	client, err := util.CopyDNSClient(dnsClient)
 	if err != nil {
 		return nil, err
 	}
@@ -285,7 +286,10 @@ func (c *Client) NegotiateKey(host, name, algorithm, mac string) (string, string
 		PublicKey: base64.StdEncoding.EncodeToString(akey),
 	}
 
-	tkey, keys, err := tsig.ExchangeTKEY(c.client, host, keyname, dns.HmacMD5, tsig.TkeyModeDH, 3600, an, extra, name, algorithm, mac)
+	c.client.TsigSecret[name] = mac
+	defer delete(c.client.TsigSecret, name)
+
+	tkey, keys, err := util.ExchangeTKEY(c.client, host, keyname, dns.HmacMD5, tsig.TkeyModeDH, 3600, an, extra, name, algorithm)
 	if err != nil {
 		return "", "", time.Time{}, err
 	}
@@ -353,8 +357,11 @@ func (c *Client) DeleteKey(keyname string) error {
 		return errors.New("No such context")
 	}
 
+	c.client.TsigSecret[keyname] = ctx.mac
+	defer delete(c.client.TsigSecret, keyname)
+
 	// Delete the key, signing the query with the key itself
-	if _, _, err := tsig.ExchangeTKEY(c.client, ctx.host, keyname, ctx.algorithm, tsig.TkeyModeDelete, 0, nil, nil, keyname, ctx.algorithm, ctx.mac); err != nil {
+	if _, _, err := util.ExchangeTKEY(c.client, ctx.host, keyname, ctx.algorithm, tsig.TkeyModeDelete, 0, nil, nil, keyname, ctx.algorithm); err != nil {
 		return err
 	}
 

@@ -1,9 +1,10 @@
-package tsig
+package util
 
 import (
 	"testing"
 	"time"
 
+	"github.com/bodgit/tsig"
 	"github.com/miekg/dns"
 	"github.com/stretchr/testify/assert"
 )
@@ -27,20 +28,20 @@ func TestCalculateTimes(t *testing.T) {
 
 	lifetime := uint32(3600)
 
-	t0, t1, err := calculateTimes(TkeyModeDH, lifetime)
+	t0, t1, err := calculateTimes(tsig.TkeyModeDH, lifetime)
 	assert.Nil(t, err)
 	assert.Equal(t, lifetime, t1-t0)
 
-	t0, t1, err = calculateTimes(TkeyModeGSS, lifetime)
+	t0, t1, err = calculateTimes(tsig.TkeyModeGSS, lifetime)
 	assert.Nil(t, err)
 	assert.Equal(t, lifetime, t1-t0)
 
-	t0, t1, err = calculateTimes(TkeyModeDelete, lifetime)
+	t0, t1, err = calculateTimes(tsig.TkeyModeDelete, lifetime)
 	assert.Nil(t, err)
 	assert.Equal(t, uint32(0), t0)
 	assert.Equal(t, uint32(0), t1)
 
-	_, _, err = calculateTimes(TkeyModeServer, lifetime)
+	_, _, err = calculateTimes(tsig.TkeyModeServer, lifetime)
 	assert.NotNil(t, err)
 }
 
@@ -56,14 +57,14 @@ func TestExchangeTKEY(t *testing.T) {
 			Ttl:    0,
 		},
 		Algorithm:  dns.GSS,
-		Mode:       TkeyModeGSS,
+		Mode:       tsig.TkeyModeGSS,
 		Inception:  now,
 		Expiration: now + 3600,
 		KeySize:    4,
 		Key:        "deadbeef",
 	}
 
-	cases := []struct {
+	tables := map[string]struct {
 		client             FakeClient
 		host               string
 		keyname            string
@@ -74,12 +75,11 @@ func TestExchangeTKEY(t *testing.T) {
 		extra              []dns.RR
 		tsigname           string
 		tsigalgo           string
-		tsigmac            string
 		expectedTKEY       *dns.TKEY
 		expectedAdditional []dns.RR
 		expectedErr        error
 	}{
-		{
+		"ok": {
 			client: FakeClient{
 				Msg: &dns.Msg{
 					Answer: []dns.RR{
@@ -92,7 +92,7 @@ func TestExchangeTKEY(t *testing.T) {
 			host:               "ns.example.com.",
 			keyname:            "test.example.com.",
 			algorithm:          dns.GSS,
-			mode:               TkeyModeGSS,
+			mode:               tsig.TkeyModeGSS,
 			lifetime:           3600,
 			expectedTKEY:       goodTKEY,
 			expectedAdditional: []dns.RR{},
@@ -100,10 +100,12 @@ func TestExchangeTKEY(t *testing.T) {
 		},
 	}
 
-	for _, c := range cases {
-		tkey, additional, err := ExchangeTKEY(&c.client, c.host, c.keyname, c.algorithm, c.mode, c.lifetime, c.input, c.extra, c.tsigname, c.tsigalgo, c.tsigmac)
-		assert.Equal(t, c.expectedTKEY, tkey)
-		assert.Equal(t, c.expectedAdditional, additional)
-		assert.Equal(t, c.expectedErr, err)
+	for name, table := range tables {
+		t.Run(name, func(t *testing.T) {
+			tkey, additional, err := ExchangeTKEY(&table.client, table.host, table.keyname, table.algorithm, table.mode, table.lifetime, table.input, table.extra, table.tsigname, table.tsigalgo)
+			assert.Equal(t, table.expectedTKEY, tkey)
+			assert.Equal(t, table.expectedAdditional, additional)
+			assert.Equal(t, table.expectedErr, err)
+		})
 	}
 }

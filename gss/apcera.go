@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/bodgit/tsig"
+	"github.com/bodgit/tsig/internal/util"
 	multierror "github.com/hashicorp/go-multierror"
 	"github.com/miekg/dns"
 	"github.com/openshift/gssapi"
@@ -34,7 +35,7 @@ func NewClient(dnsClient *dns.Client) (*Client, error) {
 		return nil, err
 	}
 
-	client, err := tsig.CopyDNSClient(dnsClient)
+	client, err := util.CopyDNSClient(dnsClient)
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +189,7 @@ func (c *Client) NegotiateContext(host string) (string, time.Time, error) {
 		var errs error
 
 		// We don't care about non-TKEY answers, no additional RR's to send, and no signing
-		if tkey, _, err = tsig.ExchangeTKEY(c.client, host, keyname, dns.GSS, tsig.TkeyModeGSS, 3600, output.Bytes(), nil, "", "", ""); err != nil {
+		if tkey, _, err = util.ExchangeTKEY(c.client, host, keyname, dns.GSS, tsig.TkeyModeGSS, 3600, output.Bytes(), nil, "", ""); err != nil {
 			errs = multierror.Append(errs, err)
 			errs = multierror.Append(errs, ctx.DeleteSecContext())
 			return "", time.Time{}, errs

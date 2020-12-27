@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/bodgit/tsig"
+	"github.com/bodgit/tsig/internal/util"
 	"github.com/jcmturner/gokrb5/v8/client"
 	"github.com/jcmturner/gokrb5/v8/config"
 	"github.com/jcmturner/gokrb5/v8/credentials"
@@ -132,7 +133,7 @@ type Client struct {
 // that occurred.
 func NewClient(dnsClient *dns.Client) (*Client, error) {
 
-	client, err := tsig.CopyDNSClient(dnsClient)
+	client, err := util.CopyDNSClient(dnsClient)
 	if err != nil {
 		return nil, err
 	}
@@ -262,7 +263,7 @@ func (c *Client) negotiateContext(host string, cl *client.Client) (string, time.
 	}
 
 	// We don't care about non-TKEY answers, no additional RR's to send, and no signing
-	tkey, _, err := tsig.ExchangeTKEY(c.client, host, keyname, dns.GSS, tsig.TkeyModeGSS, 3600, b, nil, "", "", "")
+	tkey, _, err := util.ExchangeTKEY(c.client, host, keyname, dns.GSS, tsig.TkeyModeGSS, 3600, b, nil, "", "")
 	if err != nil {
 		return "", time.Time{}, err
 	}

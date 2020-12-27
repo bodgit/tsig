@@ -12,6 +12,7 @@ import (
 	"github.com/alexbrainman/sspi"
 	"github.com/alexbrainman/sspi/negotiate"
 	"github.com/bodgit/tsig"
+	"github.com/bodgit/tsig/internal/util"
 	multierror "github.com/hashicorp/go-multierror"
 	"github.com/miekg/dns"
 )
@@ -29,7 +30,7 @@ type Client struct {
 // that occurred.
 func NewClient(dnsClient *dns.Client) (*Client, error) {
 
-	client, err := tsig.CopyDNSClient(dnsClient)
+	client, err := util.CopyDNSClient(dnsClient)
 	if err != nil {
 		return nil, err
 	}
@@ -130,7 +131,7 @@ func (c *Client) negotiateContext(host string, creds *sspi.Credentials) (string,
 		var errs error
 
 		// We don't care about non-TKEY answers, no additional RR's to send, and no signing
-		if tkey, _, err = tsig.ExchangeTKEY(c.client, host, keyname, dns.GSS, tsig.TkeyModeGSS, 3600, output, nil, "", "", ""); err != nil {
+		if tkey, _, err = util.ExchangeTKEY(c.client, host, keyname, dns.GSS, tsig.TkeyModeGSS, 3600, output, nil, "", ""); err != nil {
 			errs = multierror.Append(errs, err)
 			errs = multierror.Append(errs, ctx.Release())
 			return "", time.Time{}, errs
