@@ -36,9 +36,7 @@ var (
 	errGapToken       = errors.New("skipped predecessor token(s) detected")
 )
 
-// SequenceState tracks previously seen sequence numbers for message replay
-// and/or sequence protection
-type SequenceState struct {
+type sequenceState struct {
 	m            sync.Mutex
 	doReplay     bool
 	doSequence   bool
@@ -48,12 +46,8 @@ type SequenceState struct {
 	sequenceMask uint64
 }
 
-// NewSequenceState returns a new SequenceState seeded with sequenceNumber
-// with doReplay and doSequence controlling replay and sequence protection
-// respectively and wide controlling whether sequence numbers are expected to
-// wrap at a 32- or 64-bit boundary.
-func NewSequenceState(sequenceNumber uint64, doReplay, doSequence, wide bool) *SequenceState {
-	ss := &SequenceState{
+func newSequenceState(sequenceNumber uint64, doReplay, doSequence, wide bool) *sequenceState {
+	ss := &sequenceState{
 		doReplay:   doReplay,
 		doSequence: doSequence,
 		base:       sequenceNumber,
@@ -66,11 +60,7 @@ func NewSequenceState(sequenceNumber uint64, doReplay, doSequence, wide bool) *S
 	return ss
 }
 
-// Check the next sequence number. Sequence protection requires the sequence
-// number to increase sequentially with no duplicates or out of order delivery.
-// Replay protection relaxes these restrictions to permit limited out of order
-// delivery.
-func (ss *SequenceState) Check(sequenceNumber uint64) error {
+func (ss *sequenceState) check(sequenceNumber uint64) error {
 	if !ss.doReplay && !ss.doSequence {
 		return nil
 	}
@@ -117,7 +107,7 @@ type context struct {
 	client *client.Client
 	key    types.EncryptionKey
 	seq    uint64
-	ss     *SequenceState
+	ss     *sequenceState
 }
 
 // Client maps the TKEY name to the context that negotiated it as
@@ -222,7 +212,7 @@ func (c *Client) Verify(stripped []byte, t *dns.TSIG) error {
 	}
 	token.Payload = stripped
 
-	if err = ctx.ss.Check(token.SndSeqNum); err != nil {
+	if err = ctx.ss.check(token.SndSeqNum); err != nil {
 		return err
 	}
 
@@ -307,7 +297,7 @@ func (c *Client) negotiateContext(host string, cl *client.Client) (string, time.
 		client: cl,
 		key:    payload.Subkey,
 		seq:    uint64(apreq.APReq.Authenticator.SeqNumber),
-		ss:     NewSequenceState(uint64(payload.SequenceNumber), true, false, true),
+		ss:     newSequenceState(uint64(payload.SequenceNumber), true, false, true),
 	}
 
 	return keyname, expiry, nil
