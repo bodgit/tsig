@@ -58,7 +58,7 @@ func (c *Client) Close() error {
 // It returns the bytes for the TSIG MAC and any error that occurred.
 func (c *Client) Generate(msg []byte, t *dns.TSIG) ([]byte, error) {
 
-	if dns.CanonicalName(t.Algorithm) != dns.GSS {
+	if dns.CanonicalName(t.Algorithm) != tsig.GSS {
 		return nil, dns.ErrKeyAlg
 	}
 
@@ -85,7 +85,7 @@ func (c *Client) Generate(msg []byte, t *dns.TSIG) ([]byte, error) {
 // It returns any error that occurred.
 func (c *Client) Verify(stripped []byte, t *dns.TSIG) error {
 
-	if dns.CanonicalName(t.Algorithm) != dns.GSS {
+	if dns.CanonicalName(t.Algorithm) != tsig.GSS {
 		return dns.ErrKeyAlg
 	}
 
@@ -131,7 +131,7 @@ func (c *Client) negotiateContext(host string, creds *sspi.Credentials) (string,
 		var errs error
 
 		// We don't care about non-TKEY answers, no additional RR's to send, and no signing
-		if tkey, _, err = util.ExchangeTKEY(c.client, host, keyname, dns.GSS, tsig.TkeyModeGSS, 3600, output, nil, "", ""); err != nil {
+		if tkey, _, err = util.ExchangeTKEY(c.client, host, keyname, tsig.GSS, util.TkeyModeGSS, 3600, output, nil, "", ""); err != nil {
 			errs = multierror.Append(errs, err)
 			errs = multierror.Append(errs, ctx.Release())
 			return "", time.Time{}, errs

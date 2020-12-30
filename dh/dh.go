@@ -78,7 +78,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bodgit/tsig"
 	"github.com/bodgit/tsig/internal/util"
 	"github.com/enceve/crypto/dh"
 	multierror "github.com/hashicorp/go-multierror"
@@ -289,7 +288,7 @@ func (c *Client) NegotiateKey(host, name, algorithm, mac string) (string, string
 	c.client.TsigSecret[name] = mac
 	defer delete(c.client.TsigSecret, name)
 
-	tkey, keys, err := util.ExchangeTKEY(c.client, host, keyname, dns.HmacMD5, tsig.TkeyModeDH, 3600, an, extra, name, algorithm)
+	tkey, keys, err := util.ExchangeTKEY(c.client, host, keyname, dns.HmacMD5, util.TkeyModeDH, 3600, an, extra, name, algorithm)
 	if err != nil {
 		return "", "", time.Time{}, err
 	}
@@ -361,7 +360,7 @@ func (c *Client) DeleteKey(keyname string) error {
 	defer delete(c.client.TsigSecret, keyname)
 
 	// Delete the key, signing the query with the key itself
-	if _, _, err := util.ExchangeTKEY(c.client, ctx.host, keyname, ctx.algorithm, tsig.TkeyModeDelete, 0, nil, nil, keyname, ctx.algorithm); err != nil {
+	if _, _, err := util.ExchangeTKEY(c.client, ctx.host, keyname, ctx.algorithm, util.TkeyModeDelete, 0, nil, nil, keyname, ctx.algorithm); err != nil {
 		return err
 	}
 

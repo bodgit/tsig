@@ -10,6 +10,20 @@ import (
 	"github.com/miekg/dns"
 )
 
+const (
+	_ uint16 = iota // Reserved, RFC 2930, section 2.5
+	// TkeyModeServer is used for server assigned keying
+	TkeyModeServer
+	// TkeyModeDH is used for Diffie-Hellman exchanged keying
+	TkeyModeDH
+	// TkeyModeGSS is used for GSS-API establishment
+	TkeyModeGSS
+	// TkeyModeResolver is used for resolver assigned keying
+	TkeyModeResolver
+	// TkeyModeDelete is used for key deletion
+	TkeyModeDelete
+)
+
 // Exchanger is the interface a DNS client is expected to implement.
 type Exchanger interface {
 	Exchange(*dns.Msg, string) (*dns.Msg, time.Duration, error)
@@ -46,12 +60,12 @@ func CopyDNSClient(dnsClient *dns.Client) (*dns.Client, error) {
 func calculateTimes(mode uint16, lifetime uint32) (uint32, uint32, error) {
 
 	switch mode {
-	case tsig.TkeyModeDH:
+	case TkeyModeDH:
 		fallthrough
-	case tsig.TkeyModeGSS:
+	case TkeyModeGSS:
 		now := time.Now().Unix()
 		return uint32(now), uint32(now) + lifetime, nil
-	case tsig.TkeyModeDelete:
+	case TkeyModeDelete:
 		return 0, 0, nil
 	default:
 		return 0, 0, fmt.Errorf("Unsupported TKEY mode %d", mode)
@@ -103,7 +117,7 @@ func ExchangeTKEY(client Exchanger, host, keyname, algorithm string, mode uint16
 
 	msg.Extra = append(msg.Extra, extra...)
 
-	if dns.CanonicalName(algorithm) != dns.GSS && tsigname != "" && tsigalgo != "" {
+	if dns.CanonicalName(algorithm) != tsig.GSS && tsigname != "" && tsigalgo != "" {
 		msg.SetTsig(tsigname, tsigalgo, 300, time.Now().Unix())
 	}
 

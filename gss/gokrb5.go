@@ -150,7 +150,7 @@ func (c *Client) Close() error {
 // (which is ignored).
 // It returns the bytes for the TSIG MAC and any error that occurred.
 func (c *Client) Generate(msg []byte, t *dns.TSIG) ([]byte, error) {
-	if dns.CanonicalName(t.Algorithm) != dns.GSS {
+	if dns.CanonicalName(t.Algorithm) != tsig.GSS {
 		return nil, dns.ErrKeyAlg
 	}
 
@@ -189,7 +189,7 @@ func (c *Client) Generate(msg []byte, t *dns.TSIG) ([]byte, error) {
 // It returns any error that occurred.
 func (c *Client) Verify(stripped []byte, t *dns.TSIG) error {
 
-	if dns.CanonicalName(t.Algorithm) != dns.GSS {
+	if dns.CanonicalName(t.Algorithm) != tsig.GSS {
 		return dns.ErrKeyAlg
 	}
 
@@ -253,7 +253,7 @@ func (c *Client) negotiateContext(host string, cl *client.Client) (string, time.
 	}
 
 	// We don't care about non-TKEY answers, no additional RR's to send, and no signing
-	tkey, _, err := util.ExchangeTKEY(c.client, host, keyname, dns.GSS, tsig.TkeyModeGSS, 3600, b, nil, "", "")
+	tkey, _, err := util.ExchangeTKEY(c.client, host, keyname, tsig.GSS, util.TkeyModeGSS, 3600, b, nil, "", "")
 	if err != nil {
 		return "", time.Time{}, err
 	}

@@ -28,20 +28,20 @@ func TestCalculateTimes(t *testing.T) {
 
 	lifetime := uint32(3600)
 
-	t0, t1, err := calculateTimes(tsig.TkeyModeDH, lifetime)
+	t0, t1, err := calculateTimes(TkeyModeDH, lifetime)
 	assert.Nil(t, err)
 	assert.Equal(t, lifetime, t1-t0)
 
-	t0, t1, err = calculateTimes(tsig.TkeyModeGSS, lifetime)
+	t0, t1, err = calculateTimes(TkeyModeGSS, lifetime)
 	assert.Nil(t, err)
 	assert.Equal(t, lifetime, t1-t0)
 
-	t0, t1, err = calculateTimes(tsig.TkeyModeDelete, lifetime)
+	t0, t1, err = calculateTimes(TkeyModeDelete, lifetime)
 	assert.Nil(t, err)
 	assert.Equal(t, uint32(0), t0)
 	assert.Equal(t, uint32(0), t1)
 
-	_, _, err = calculateTimes(tsig.TkeyModeServer, lifetime)
+	_, _, err = calculateTimes(TkeyModeServer, lifetime)
 	assert.NotNil(t, err)
 }
 
@@ -56,8 +56,8 @@ func TestExchangeTKEY(t *testing.T) {
 			Class:  dns.ClassANY,
 			Ttl:    0,
 		},
-		Algorithm:  dns.GSS,
-		Mode:       tsig.TkeyModeGSS,
+		Algorithm:  tsig.GSS,
+		Mode:       TkeyModeGSS,
 		Inception:  now,
 		Expiration: now + 3600,
 		KeySize:    4,
@@ -91,8 +91,8 @@ func TestExchangeTKEY(t *testing.T) {
 			},
 			host:               "ns.example.com.",
 			keyname:            "test.example.com.",
-			algorithm:          dns.GSS,
-			mode:               tsig.TkeyModeGSS,
+			algorithm:          tsig.GSS,
+			mode:               TkeyModeGSS,
 			lifetime:           3600,
 			expectedTKEY:       goodTKEY,
 			expectedAdditional: []dns.RR{},
