@@ -9,6 +9,7 @@ Example client:
                 "fmt"
                 "time"
 
+                "github.com/bodgit/tsig"
                 "github.com/bodgit/tsig/gss"
                 "github.com/miekg/dns"
         )
@@ -34,8 +35,7 @@ Example client:
                         panic(err)
                 }
 
-                dnsClient.TsigGSS = gssClient
-                dnsClient.TsigSecret = map[string]string{keyname: ""}
+                dnsClient.TsigProvider = gssClient
 
                 // Use the DNS client as normal
 
@@ -48,7 +48,7 @@ Example client:
                 }
                 msg.Insert([]dns.RR{insert})
 
-                msg.SetTsig(keyname, dns.GSS, 300, time.Now().Unix())
+                msg.SetTsig(keyname, tsig.GSS, 300, time.Now().Unix())
 
                 rr, _, err := dnsClient.Exchange(msg, host)
                 if err != nil {

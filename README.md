@@ -52,8 +52,7 @@ func main() {
                 panic(err)
         }
 
-        dnsClient.TsigGSS = gssClient
-        dnsClient.TsigSecret = map[string]string{keyname: ""}
+        dnsClient.TsigProvider = gssClient
 
         // Use the DNS client as normal
 
