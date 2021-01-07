@@ -35,6 +35,8 @@ func NewClient(dnsClient *dns.Client) (*Client, error) {
 		return nil, err
 	}
 
+	client.TsigProvider = new(gssNoVerify)
+
 	c := &Client{
 		client: client,
 		ctx:    make(map[string]*negotiate.ClientContext),

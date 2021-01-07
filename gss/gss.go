@@ -76,9 +76,32 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/bodgit/tsig"
 	multierror "github.com/hashicorp/go-multierror"
 	"github.com/miekg/dns"
 )
+
+// gssNoVerify is a dns.TsigProvider that skips any GSS-TSIG verification.
+//
+// BIND doesn't sign TKEY responses but Windows does, using the key you're
+// currently negotiating so it creates a chicken & egg problem. According
+// to the RFC, verification isn't needed as the TKEY response should be
+// cryptographically secure anyway.
+type gssNoVerify struct{}
+
+func (*gssNoVerify) Generate(_ []byte, t *dns.TSIG) ([]byte, error) {
+	if dns.CanonicalName(t.Algorithm) != tsig.GSS {
+		return nil, dns.ErrKeyAlg
+	}
+	return nil, dns.ErrSecret
+}
+
+func (*gssNoVerify) Verify(_ []byte, t *dns.TSIG) error {
+	if dns.CanonicalName(t.Algorithm) != tsig.GSS {
+		return dns.ErrKeyAlg
+	}
+	return nil
+}
 
 func generateTKEYName(host string) string {
 

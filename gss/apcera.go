@@ -40,6 +40,8 @@ func NewClient(dnsClient *dns.Client) (*Client, error) {
 		return nil, err
 	}
 
+	client.TsigProvider = new(gssNoVerify)
+
 	c := &Client{
 		lib:    lib,
 		client: client,
