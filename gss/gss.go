@@ -72,6 +72,7 @@ uses native SSPI which has a similar API.
 package gss
 
 import (
+	"errors"
 	"fmt"
 	"math/rand"
 	"time"
@@ -79,6 +80,10 @@ import (
 	"github.com/bodgit/tsig"
 	multierror "github.com/hashicorp/go-multierror"
 	"github.com/miekg/dns"
+)
+
+var (
+	errNotSupported = errors.New("not supported")
 )
 
 // gssNoVerify is a dns.TsigProvider that skips any GSS-TSIG verification.

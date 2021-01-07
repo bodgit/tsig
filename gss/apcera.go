@@ -235,7 +235,7 @@ func (c *Client) NegotiateContext(host string) (string, time.Time, error) {
 // occurred.
 func (c *Client) NegotiateContextWithCredentials(host, domain, username, password string) (string, time.Time, error) {
 
-	return "", time.Time{}, errors.New("not supported")
+	return "", time.Time{}, errNotSupported
 }
 
 // NegotiateContextWithKeytab exchanges RFC 2930 TKEY records with the
@@ -245,7 +245,7 @@ func (c *Client) NegotiateContextWithCredentials(host, domain, username, passwor
 // occurred.
 func (c *Client) NegotiateContextWithKeytab(host, domain, username, path string) (string, time.Time, error) {
 
-	return "", time.Time{}, errors.New("not supported")
+	return "", time.Time{}, errNotSupported
 }
 
 // DeleteContext deletes the active security context associated with the given

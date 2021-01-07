@@ -207,7 +207,7 @@ func (c *Client) NegotiateContextWithCredentials(host, domain, username, passwor
 // occurred.
 func (c *Client) NegotiateContextWithKeytab(host, domain, username, path string) (string, time.Time, error) {
 
-	return "", time.Time{}, errors.New("not supported")
+	return "", time.Time{}, errNotSupported
 }
 
 // DeleteContext deletes the active security context associated with the given
