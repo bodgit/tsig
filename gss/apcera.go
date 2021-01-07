@@ -162,6 +162,7 @@ func (c *Client) NegotiateContext(host string) (string, time.Time, error) {
 	if err != nil {
 		return "", time.Time{}, err
 	}
+	defer service.Release()
 
 	var input *gssapi.Buffer
 	var ctx *gssapi.CtxId
