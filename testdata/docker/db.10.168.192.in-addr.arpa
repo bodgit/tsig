@@ -1,0 +1,15 @@
+$ORIGIN .
+$TTL 259200	; 3 days
+10.168.192.in-addr.arpa		IN SOA	ns.example.com. hostmaster.example.com. (
+				2020122801 ; serial
+				28800      ; refresh (8 hours)
+				7200       ; retry (2 hours)
+				2419200    ; expire (4 weeks)
+				86400      ; minimum (1 day)
+				)
+			NS	ns.example.com.
+$ORIGIN 10.168.192.in-addr.arpa.
+$TTL 3600	; 1 hour
+100			PTR	kdc.example.com.
+101			PTR	ns.example.com.
+102			PTR	client.example.com.

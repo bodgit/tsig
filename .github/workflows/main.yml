@@ -10,6 +10,13 @@ jobs:
         go:
           - '1.14'
           - '1.15'
+    env:
+      DNS_HOST: ns.example.com
+      DNS_REALM: EXAMPLE.COM
+      DNS_USERNAME: test
+      DNS_PASSWORD: password
+      DNS_KEYTAB: /home/runner/work/tsig/tsig/testdata/test.keytab
+      KRB5_CONFIG: /home/runner/work/tsig/tsig/testdata/docker/krb5.conf
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -17,7 +24,41 @@ jobs:
         uses: actions/setup-go@v2
         with:
           go-version: ${{ matrix.go }}
-      - name: Build
+      - name: Create infrastructure
+        run: |
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -yq libkrb5-dev krb5-user
+          sudo docker buildx build --target kdc --tag kdc testdata/docker/
+          sudo docker buildx build --target ns --tag ns testdata/docker/
+          sudo docker buildx build --target keytab --output type=local,dest=testdata/ testdata/docker/
+          sudo docker run -d --tmpfs /tmp --tmpfs /run -v /sys/fs/cgroup:/sys/fs/cgroup:ro -v /etc/localtime:/etc/localtime:ro -p 127.0.0.1:88:88 -p 127.0.0.1:88:88/udp -p 127.0.0.1:464:464 -p 127.0.0.1:464:464/udp --rm --name kdc kdc
+          sudo docker run -d --tmpfs /tmp --tmpfs /run -v /sys/fs/cgroup:/sys/fs/cgroup:ro -v /etc/localtime:/etc/localtime:ro -p 127.0.0.1:53:53 -p 127.0.0.1:53:53/udp --rm --name ns --hostname $DNS_HOST ns
+          echo 127.0.0.1 $DNS_HOST | sudo tee -a /etc/hosts
+          sudo chmod 644 $DNS_KEYTAB
+          echo $DNS_PASSWORD | kinit $DNS_USERNAME@$DNS_REALM
+      - name: Test (gokrb5)
+        run: go test -v -coverprofile=gokrb5.out ./...
+      - name: Test (apcera)
+        run: go test -v -coverprofile=apcera.out -tags apcera ./...
+      - name: Build (SSPI)
         run: go build ./...
-      - name: Test
-        run: go test -v ./...
+        env:
+          GOOS: windows
+      - name: Install coverage tools
+        run: |
+          go get github.com/wadey/gocovmerge
+          go get github.com/mattn/goveralls
+        env:
+          GO111MODULE: off
+      - name: Merge coverage reports
+        run: gocovmerge gokrb5.out apcera.out >cover.out
+      - name: Send coverage
+        run: goveralls -coverprofile=cover.out -service=github
+        env:
+          COVERALLS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v1
+        with:
+          version: latest
+          args: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

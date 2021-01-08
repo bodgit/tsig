@@ -5,7 +5,6 @@ Example client:
 
         import (
                 "fmt"
-                "net"
                 "time"
 
                 "github.com/bodgit/tsig/dh"
@@ -13,24 +12,25 @@ Example client:
         )
 
         func main() {
-                host := "ns.example.com"
+                dnsClient := new(dns.Client)
+                dnsClient.Net = "tcp"
+                dnsClient.TsigSecret = map[string]string{"tsig.example.com.": "k9uK5qsPfbBxvVuldwzYww=="}
 
-                d, err := dh.New()
+                dhClient, err := dh.NewClient(dnsClient)
                 if err != nil {
                         panic(err)
                 }
-                defer d.Close()
+                defer dhClient.Close()
+
+                host := "ns.example.com:53"
 
                 // Negotiate a key with the chosen server
-                keyname, mac, _, err := d.NegotiateKey(host, "tsig.example.com.", dns.HmacMD5, "k9uK5qsPfbBxvVuldwzYww==")
+                keyname, mac, _, err := dhClient.NegotiateKey(host, "tsig.example.com.", dns.HmacMD5, "k9uK5qsPfbBxvVuldwzYww==")
                 if err != nil {
                         panic(err)
                 }
 
-                client := &dns.Client{
-                        Net:        "tcp",
-                        TsigSecret: map[string]string{*keyname: *mac},
-                }
+                dnsClient.TsigSecret[keyname] = mac
 
                 // Use the DNS client as normal
 
@@ -43,9 +43,9 @@ Example client:
                 }
                 msg.Insert([]dns.RR{insert})
 
-                msg.SetTsig(*keyname, dns.HmacMD5, 300, time.Now().Unix())
+                msg.SetTsig(keyname, dns.HmacMD5, 300, time.Now().Unix())
 
-                rr, _, err := client.Exchange(msg, net.JoinHostPort(host, "53"))
+                rr, _, err := dnsClient.Exchange(msg, host)
                 if err != nil {
                         panic(err)
                 }
@@ -55,7 +55,7 @@ Example client:
                 }
 
                 // Revoke the key
-                err = d.DeleteKey(keyname)
+                err = dhClient.DeleteKey(keyname)
                 if err != nil {
                         panic(err)
                 }
@@ -78,7 +78,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bodgit/tsig"
+	"github.com/bodgit/tsig/internal/util"
 	"github.com/enceve/crypto/dh"
 	multierror "github.com/hashicorp/go-multierror"
 	"github.com/miekg/dns"
@@ -102,11 +102,12 @@ type dhkey struct {
 	prime, generator, key []byte
 }
 
-// DH maps the TKEY name to the target host that negotiated it as
+// Client maps the TKEY name to the target host that negotiated it as
 // well as any other internal state.
-type DH struct {
-	m   sync.Mutex
-	ctx map[string]*context
+type Client struct {
+	m      sync.Mutex
+	client *dns.Client
+	ctx    map[string]*context
 }
 
 func dhGroup(group int) (*dh.Group, error) {
@@ -124,13 +125,19 @@ func dhGroup(group int) (*dh.Group, error) {
 	}
 }
 
-// New performs any library initialization necessary.
+// NewClient performs any library initialization necessary.
 // It returns a context handle for any further functions along with any error
 // that occurred.
-func New() (*DH, error) {
+func NewClient(dnsClient *dns.Client) (*Client, error) {
 
-	c := &DH{
-		ctx: make(map[string]*context),
+	client, err := util.CopyDNSClient(dnsClient)
+	if err != nil {
+		return nil, err
+	}
+
+	c := &Client{
+		client: client,
+		ctx:    make(map[string]*context),
 	}
 
 	return c, nil
@@ -139,7 +146,7 @@ func New() (*DH, error) {
 // Close revokes any active keys and unloads any underlying libraries as
 // necessary.
 // It returns any error that occurred.
-func (c *DH) Close() error {
+func (c *Client) Close() error {
 
 	c.m.Lock()
 	keys := make([]string, 0, len(c.ctx))
@@ -150,7 +157,7 @@ func (c *DH) Close() error {
 
 	var errs error
 	for _, k := range keys {
-		errs = multierror.Append(errs, c.DeleteKey(&k))
+		errs = multierror.Append(errs, c.DeleteKey(k))
 	}
 
 	return errs
@@ -232,18 +239,18 @@ func computeDHKey(ourNonce, peerNonce, secret []byte) []byte {
 // algorithm and MAC.
 // It returns the negotiated TKEY name, MAC, expiry time, and any error that
 // occurred.
-func (c *DH) NegotiateKey(host, name, algorithm, mac string) (*string, *string, *time.Time, error) {
+func (c *Client) NegotiateKey(host, name, algorithm, mac string) (string, string, time.Time, error) {
 
 	keyname := "."
 
 	g, err := dhGroup(2)
 	if err != nil {
-		return nil, nil, nil, err
+		return "", "", time.Time{}, err
 	}
 
 	ax, ay, err := g.GenerateKey(nil)
 	if err != nil {
-		return nil, nil, nil, err
+		return "", "", time.Time{}, err
 	}
 
 	adh := &dhkey{
@@ -254,13 +261,13 @@ func (c *DH) NegotiateKey(host, name, algorithm, mac string) (*string, *string, 
 
 	akey, err := writeDHKey(adh)
 	if err != nil {
-		return nil, nil, nil, err
+		return "", "", time.Time{}, err
 	}
 
 	// Generate our nonce
 	an := make([]byte, 16) // FIXME I suspect it just is
 	if _, err = rand.Read(an); err != nil {
-		return nil, nil, nil, err
+		return "", "", time.Time{}, err
 	}
 
 	extra := make([]dns.RR, 1)
@@ -278,9 +285,12 @@ func (c *DH) NegotiateKey(host, name, algorithm, mac string) (*string, *string, 
 		PublicKey: base64.StdEncoding.EncodeToString(akey),
 	}
 
-	tkey, keys, err := tsig.ExchangeTKEY(host, keyname, dns.HmacMD5, tsig.TkeyModeDH, 3600, an, extra, &name, &algorithm, &mac)
+	c.client.TsigSecret[name] = mac
+	defer delete(c.client.TsigSecret, name)
+
+	tkey, keys, err := util.ExchangeTKEY(c.client, host, keyname, dns.HmacMD5, util.TkeyModeDH, 3600, an, extra, name, algorithm)
 	if err != nil {
-		return nil, nil, nil, err
+		return "", "", time.Time{}, err
 	}
 
 	var bkey []byte
@@ -289,25 +299,25 @@ func (c *DH) NegotiateKey(host, name, algorithm, mac string) (*string, *string, 
 		case *dns.KEY:
 			if key.Header().Name != keyname && key.Algorithm == dns.DH {
 				if bkey, err = base64.StdEncoding.DecodeString(key.PublicKey); err != nil {
-					return nil, nil, nil, err
+					return "", "", time.Time{}, err
 				}
 			}
 		}
 	}
 
 	if bkey == nil {
-		return nil, nil, nil, errors.New("No peer KEY record")
+		return "", "", time.Time{}, errors.New("No peer KEY record")
 	}
 
 	bdh, err := readDHKey(bkey)
 	if err != nil {
-		return nil, nil, nil, err
+		return "", "", time.Time{}, err
 	}
 	by := new(big.Int).SetBytes(bdh.key)
 
 	err = g.Check(by)
 	if err != nil {
-		return nil, nil, nil, err
+		return "", "", time.Time{}, err
 	}
 
 	secret := g.ComputeSecret(ax, by).Bytes()
@@ -315,7 +325,7 @@ func (c *DH) NegotiateKey(host, name, algorithm, mac string) (*string, *string, 
 	// The peer nonce is in the TKEY response
 	bn, err := hex.DecodeString(tkey.Key)
 	if err != nil {
-		return nil, nil, nil, err
+		return "", "", time.Time{}, err
 	}
 
 	lower := strings.ToLower(tkey.Header().Name)
@@ -331,27 +341,30 @@ func (c *DH) NegotiateKey(host, name, algorithm, mac string) (*string, *string, 
 		mac:       key,
 	}
 
-	return &lower, &key, &expiry, nil
+	return lower, key, expiry, nil
 }
 
 // DeleteKey revokes the active key associated with the given TKEY name.
 // It returns any error that occurred.
-func (c *DH) DeleteKey(keyname *string) error {
+func (c *Client) DeleteKey(keyname string) error {
 
 	c.m.Lock()
 	defer c.m.Unlock()
 
-	ctx, ok := c.ctx[*keyname]
+	ctx, ok := c.ctx[keyname]
 	if !ok {
 		return errors.New("No such context")
 	}
 
+	c.client.TsigSecret[keyname] = ctx.mac
+	defer delete(c.client.TsigSecret, keyname)
+
 	// Delete the key, signing the query with the key itself
-	if _, _, err := tsig.ExchangeTKEY(ctx.host, *keyname, ctx.algorithm, tsig.TkeyModeDelete, 0, nil, nil, keyname, &ctx.algorithm, &ctx.mac); err != nil {
+	if _, _, err := util.ExchangeTKEY(c.client, ctx.host, keyname, ctx.algorithm, util.TkeyModeDelete, 0, nil, nil, keyname, ctx.algorithm); err != nil {
 		return err
 	}
 
-	delete(c.ctx, *keyname)
+	delete(c.ctx, keyname)
 
 	return nil
 }
