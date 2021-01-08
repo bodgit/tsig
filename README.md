@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/github/v/tag/bodgit/tsig)](https://github.com/bodgit/tsig/tags)
+[![GitHub release](https://img.shields.io/github/v/release/bodgit/tsig)](https://github.com/bodgit/tsig/releases)
 [![Build Status](https://img.shields.io/github/workflow/status/bodgit/tsig/build)](https://github.com/bodgit/tsig/actions?query=workflow%3Abuild)
 [![Coverage Status](https://coveralls.io/repos/github/bodgit/tsig/badge.svg?branch=master)](https://coveralls.io/github/bodgit/tsig?branch=master)
 [![Go Report Card](https://goreportcard.com/badge/github.com/bodgit/tsig)](https://goreportcard.com/report/github.com/bodgit/tsig)
@@ -82,5 +82,39 @@ func main() {
         if err != nil {
                 panic(err)
         }
+}
+```
+
+If you need to deal with both regular TSIG and GSS-TSIG together then this
+package also exports an HMAC TSIG implementation. To use both together set
+your client up something like this:
+
+```golang
+package main
+
+import (
+        "github.com/bodgit/tsig"
+        "github.com/bodgit/tsig/gss"
+        "github.com/miekg/dns"
+)
+
+func main() {
+        dnsClient := new(dns.Client)
+        dnsClient.Net = "tcp"
+
+        // Create HMAC TSIG provider
+        hmac := tsig.HMAC{"axfr.": "so6ZGir4GPAqINNh9U5c3A=="}
+
+        // Create GSS-TSIG provider
+        gssClient, err := gss.NewClient(dnsClient)
+        if err != nil {
+                panic(err)
+        }
+        defer gssClient.Close()
+
+        // Configure DNS client with both providers
+        dnsClient.TsigProvider = tsig.MultiProvider(hmac, gssClient)
+
+        // Use the DNS client as normal
 }
 ```
