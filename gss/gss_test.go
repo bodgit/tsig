@@ -102,7 +102,7 @@ func testExchange(t *testing.T) error {
 	}
 
 	if rr.Rcode != dns.RcodeSuccess {
-		return fmt.Errorf("DNS error: %s (%d)\n", dns.RcodeToString[rr.Rcode], rr.Rcode)
+		return fmt.Errorf("DNS error: %s (%d)", dns.RcodeToString[rr.Rcode], rr.Rcode)
 	}
 
 	err = gssClient.DeleteContext(keyname)

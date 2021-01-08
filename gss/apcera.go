@@ -60,9 +60,9 @@ func (c *Client) Close() error {
 }
 
 // Generate generates the TSIG MAC based on the established context.
-// It is called with the bytes of the DNS message, the algorithm name, the
-// TSIG name (which is the negotiated TKEY for this context) and the secret
-// (which is ignored).
+// It is called with the bytes of the DNS message, and the partial TSIG
+// record containing the algorithm and name which is the negotiated TKEY
+// for this context.
 // It returns the bytes for the TSIG MAC and any error that occurred.
 func (c *Client) Generate(msg []byte, t *dns.TSIG) ([]byte, error) {
 
@@ -94,9 +94,9 @@ func (c *Client) Generate(msg []byte, t *dns.TSIG) ([]byte, error) {
 }
 
 // Verify verifies the TSIG MAC based on the established context.
-// It is called with the bytes of the DNS message, the TSIG record, the TSIG
-// name (which is the negotiated TKEY for this context) and the secret (which
-// is ignored).
+// It is called with the bytes of the DNS message, and the TSIG record
+// containing the algorithm, MAC, and name which is the negotiated TKEY
+// for this context.
 // It returns any error that occurred.
 func (c *Client) Verify(stripped []byte, t *dns.TSIG) error {
 
