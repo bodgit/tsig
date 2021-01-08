@@ -43,6 +43,18 @@ jobs:
         run: go build ./...
         env:
           GOOS: windows
+      - name: Install coverage tools
+        run: |
+          go get github.com/wadey/gocovmerge
+          go get github.com/mattn/goveralls
+        env:
+          GO111MODULE: off
+      - name: Merge coverage reports
+        run: gocovmerge gokrb5.out apcera.out >cover.out
+      - name: Send coverage
+        run: goveralls -coverprofile=cover.out -service=github
+        env:
+          COVERALLS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v1
         with:
