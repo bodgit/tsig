@@ -5,7 +5,7 @@ require (
 	github.com/enceve/crypto v0.0.0-20160707101852-34d48bb93815
 	github.com/hashicorp/go-multierror v1.1.0
 	github.com/jcmturner/gokrb5/v8 v8.4.2
-	github.com/jinzhu/copier v0.1.0
+	github.com/jinzhu/copier v0.2.4
 	github.com/miekg/dns v1.1.36-0.20210109083720-731b191cabd1
 	github.com/openshift/gssapi v0.0.0-20161010215902-5fb4217df13b
 	github.com/stretchr/testify v1.7.0
