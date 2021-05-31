@@ -18,6 +18,8 @@ This is most useful for allowing
 for dealing with Windows DNS servers that require 'Secure only' updates or
 BIND if it has been configured to use Kerberos.
 
+> :warning: Windows DNS servers don't accept wildcard resource names in dynamic updates.
+
 Here is an example client, it is necessary that your Kerberos or Active
 Directory environment is configured and functional:
 
