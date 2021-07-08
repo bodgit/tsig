@@ -400,6 +400,19 @@ func (c *Client) NegotiateContextWithCredentials(host, domain, username, passwor
 	return c.negotiateContext(host, cl)
 }
 
+// NegotiateContextWithClient exchanges RFC 2930 TKEY records with the
+// indicated DNS server to establish a security context using the provided
+// client.
+// It returns the negotiated TKEY name, expiration time, and any error that
+// occurred.
+func (c *Client) NegotiateContextWithClient(host string, cl *client.Client) (string, time.Time, error) {
+	if err := cl.Login(); err != nil {
+		return "", time.Time{}, err
+	}
+
+	return c.negotiateContext(host, cl)
+}
+
 // NegotiateContextWithKeytab exchanges RFC 2930 TKEY records with the
 // indicated DNS server to establish a security context using the provided
 // keytab.
