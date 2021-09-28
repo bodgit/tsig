@@ -25,10 +25,26 @@ type Client struct {
 	ctx    map[string]*negotiate.ClientContext
 }
 
+// WithConfig sets the config property to allow krb5 configuration
+// to be explicitly set
+func WithConfig(config string) func(*Client) error {
+	return func(c *Client) error {
+		return errNotSupported
+	}
+}
+
+// WithConfigFile sets the configFile property to allow krb5
+// configuration file to be explicitly set
+func WithConfigFile(configFile string) func(*Client) error {
+	return func(c *Client) error {
+		return errNotSupported
+	}
+}
+
 // New performs any library initialization necessary.
 // It returns a context handle for any further functions along with any error
 // that occurred.
-func NewClient(dnsClient *dns.Client) (*Client, error) {
+func NewClient(dnsClient *dns.Client, options ...func(*Client) error) (*Client, error) {
 
 	client, err := util.CopyDNSClient(dnsClient)
 	if err != nil {
@@ -40,6 +56,10 @@ func NewClient(dnsClient *dns.Client) (*Client, error) {
 	c := &Client{
 		client: client,
 		ctx:    make(map[string]*negotiate.ClientContext),
+	}
+
+	if err := c.setOption(options...); err != nil {
+		return nil, err
 	}
 
 	return c, nil
