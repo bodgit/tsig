@@ -141,3 +141,17 @@ func (c *Client) close() error {
 
 	return errs
 }
+
+func (c *Client) setOption(options ...func(*Client) error) error {
+	for _, option := range options {
+		if err := option(c); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// SetConfig sets the Kerberos configuration used by c
+func (c *Client) SetConfig(config string) error {
+	return c.setOption(WithConfig(config))
+}

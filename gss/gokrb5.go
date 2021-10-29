@@ -115,13 +115,22 @@ type context struct {
 type Client struct {
 	m      sync.RWMutex
 	client *dns.Client
+	config string
 	ctx    map[string]context
+}
+
+// WithConfig sets the Kerberos configuration used
+func WithConfig(config string) func(*Client) error {
+	return func(c *Client) error {
+		c.config = config
+		return nil
+	}
 }
 
 // NewClient performs any library initialization necessary.
 // It returns a context handle for any further functions along with any error
 // that occurred.
-func NewClient(dnsClient *dns.Client) (*Client, error) {
+func NewClient(dnsClient *dns.Client, options ...func(*Client) error) (*Client, error) {
 
 	client, err := util.CopyDNSClient(dnsClient)
 	if err != nil {
@@ -133,6 +142,10 @@ func NewClient(dnsClient *dns.Client) (*Client, error) {
 	c := &Client{
 		client: client,
 		ctx:    make(map[string]context),
+	}
+
+	if err := c.setOption(options...); err != nil {
+		return nil, err
 	}
 
 	return c, nil
@@ -327,7 +340,10 @@ func loadCache() (*credentials.CCache, error) {
 	return cache, nil
 }
 
-func loadConfig() (*config.Config, error) {
+func (c *Client) loadConfig() (*config.Config, error) {
+	if c.config != "" {
+		return config.NewFromString(c.config)
+	}
 
 	path := os.Getenv("KRB5_CONFIG")
 	_, err := os.Stat(path)
@@ -345,12 +361,7 @@ func loadConfig() (*config.Config, error) {
 		}
 	}
 
-	cfg, err := config.Load(path)
-	if err != nil {
-		return nil, err
-	}
-
-	return cfg, nil
+	return config.Load(path)
 }
 
 // NegotiateContext exchanges RFC 2930 TKEY records with the indicated DNS
@@ -364,7 +375,7 @@ func (c *Client) NegotiateContext(host string) (string, time.Time, error) {
 		return "", time.Time{}, err
 	}
 
-	cfg, err := loadConfig()
+	cfg, err := c.loadConfig()
 	if err != nil {
 		return "", time.Time{}, err
 	}
@@ -386,7 +397,7 @@ func (c *Client) NegotiateContextWithCredentials(host, domain, username, passwor
 
 	// Should I still initialise the credential cache?
 
-	cfg, err := loadConfig()
+	cfg, err := c.loadConfig()
 	if err != nil {
 		return "", time.Time{}, err
 	}
@@ -414,7 +425,7 @@ func (c *Client) NegotiateContextWithKeytab(host, domain, username, path string)
 		return "", time.Time{}, err
 	}
 
-	cfg, err := loadConfig()
+	cfg, err := c.loadConfig()
 	if err != nil {
 		return "", time.Time{}, err
 	}
