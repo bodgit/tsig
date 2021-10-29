@@ -37,17 +37,17 @@ func WithConfig(config string) func(*Client) error {
 // that occurred.
 func NewClient(dnsClient *dns.Client, options ...func(*Client) error) (*Client, error) {
 
-	lib, err := gssapi.Load(nil)
-	if err != nil {
-		return nil, err
-	}
-
 	client, err := util.CopyDNSClient(dnsClient)
 	if err != nil {
 		return nil, err
 	}
 
 	client.TsigProvider = new(gssNoVerify)
+
+	lib, err := gssapi.Load(nil)
+	if err != nil {
+		return nil, err
+	}
 
 	c := &Client{
 		lib:    lib,
@@ -56,7 +56,7 @@ func NewClient(dnsClient *dns.Client, options ...func(*Client) error) (*Client, 
 	}
 
 	if err := c.setOption(options...); err != nil {
-		return nil, err
+		return nil, multierror.Append(err, c.lib.Unload())
 	}
 
 	return c, nil

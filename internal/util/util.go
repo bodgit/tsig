@@ -42,7 +42,7 @@ func CopyDNSClient(dnsClient *dns.Client) (*dns.Client, error) {
 	switch client.Net {
 	case "tcp", "tcp4", "tcp6":
 		break
-	case "udp":
+	case "", "udp":
 		client.Net = "tcp"
 	case "ip4", "udp4":
 		client.Net = "tcp4"
