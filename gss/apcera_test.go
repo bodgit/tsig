@@ -19,5 +19,5 @@ func TestExchangeKeytab(t *testing.T) {
 
 func TestNewClientWithConfig(t *testing.T) {
 	_, err := NewClient(new(dns.Client), WithConfig(""))
-	assert.Equal(t, errNotSupported, err)
+	assert.NotNil(t, err)
 }
