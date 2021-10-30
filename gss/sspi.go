@@ -13,6 +13,7 @@ import (
 	"github.com/alexbrainman/sspi/negotiate"
 	"github.com/bodgit/tsig"
 	"github.com/bodgit/tsig/internal/util"
+	"github.com/go-logr/logr"
 	multierror "github.com/hashicorp/go-multierror"
 	"github.com/miekg/dns"
 )
@@ -23,6 +24,7 @@ type Client struct {
 	m      sync.RWMutex
 	client *dns.Client
 	ctx    map[string]*negotiate.ClientContext
+	logger logr.Logger
 }
 
 // WithConfig sets the Kerberos configuration used
@@ -47,6 +49,7 @@ func NewClient(dnsClient *dns.Client, options ...func(*Client) error) (*Client, 
 	c := &Client{
 		client: client,
 		ctx:    make(map[string]*negotiate.ClientContext),
+		logger: logr.Discard(),
 	}
 
 	if err := c.setOption(options...); err != nil {

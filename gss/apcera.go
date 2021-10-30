@@ -11,6 +11,7 @@ import (
 
 	"github.com/bodgit/tsig"
 	"github.com/bodgit/tsig/internal/util"
+	"github.com/go-logr/logr"
 	multierror "github.com/hashicorp/go-multierror"
 	"github.com/miekg/dns"
 	"github.com/openshift/gssapi"
@@ -23,6 +24,7 @@ type Client struct {
 	lib    *gssapi.Lib
 	client *dns.Client
 	ctx    map[string]*gssapi.CtxId
+	logger logr.Logger
 }
 
 // WithConfig sets the Kerberos configuration used
@@ -53,6 +55,7 @@ func NewClient(dnsClient *dns.Client, options ...func(*Client) error) (*Client, 
 		lib:    lib,
 		client: client,
 		ctx:    make(map[string]*gssapi.CtxId),
+		logger: logr.Discard(),
 	}
 
 	if err := c.setOption(options...); err != nil {
