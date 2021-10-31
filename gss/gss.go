@@ -78,6 +78,7 @@ import (
 	"time"
 
 	"github.com/bodgit/tsig"
+	"github.com/go-logr/logr"
 	multierror "github.com/hashicorp/go-multierror"
 	"github.com/miekg/dns"
 )
@@ -154,4 +155,17 @@ func (c *Client) setOption(options ...func(*Client) error) error {
 // SetConfig sets the Kerberos configuration used by c
 func (c *Client) SetConfig(config string) error {
 	return c.setOption(WithConfig(config))
+}
+
+// WithLogger sets the logger used
+func WithLogger(logger logr.Logger) func(*Client) error {
+	return func(c *Client) error {
+		c.logger = logger
+		return nil
+	}
+}
+
+// SetLogger sets the logger used by c
+func (c *Client) SetLogger(logger logr.Logger) error {
+	return c.setOption(WithLogger(logger))
 }

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/bodgit/tsig"
+	"github.com/go-logr/logr"
 	"github.com/miekg/dns"
 	"github.com/stretchr/testify/assert"
 )
@@ -173,4 +174,9 @@ func testExchangeKeytab(t *testing.T) error {
 
 func TestExchange(t *testing.T) {
 	assert.Nil(t, testExchange(t))
+}
+
+func TestNewClientWithLogger(t *testing.T) {
+	_, err := NewClient(new(dns.Client), WithLogger(logr.Discard()))
+	assert.Nil(t, err)
 }

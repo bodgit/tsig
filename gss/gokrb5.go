@@ -15,6 +15,7 @@ import (
 
 	"github.com/bodgit/tsig"
 	"github.com/bodgit/tsig/internal/util"
+	"github.com/go-logr/logr"
 	"github.com/jcmturner/gokrb5/v8/client"
 	"github.com/jcmturner/gokrb5/v8/config"
 	"github.com/jcmturner/gokrb5/v8/credentials"
@@ -117,6 +118,7 @@ type Client struct {
 	client *dns.Client
 	config string
 	ctx    map[string]context
+	logger logr.Logger
 }
 
 // WithConfig sets the Kerberos configuration used
@@ -142,6 +144,7 @@ func NewClient(dnsClient *dns.Client, options ...func(*Client) error) (*Client, 
 	c := &Client{
 		client: client,
 		ctx:    make(map[string]context),
+		logger: logr.Discard(),
 	}
 
 	if err := c.setOption(options...); err != nil {
