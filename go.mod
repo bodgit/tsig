@@ -9,7 +9,7 @@ require (
 	github.com/jinzhu/copier v0.3.5
 	github.com/miekg/dns v1.1.49
 	github.com/openshift/gssapi v0.0.0-20161010215902-5fb4217df13b
-	github.com/stretchr/testify v1.7.1
+	github.com/stretchr/testify v1.7.2
 	golang.org/x/crypto v0.0.0-20210220033148-5ea612d1eb83 // indirect
 )
 
