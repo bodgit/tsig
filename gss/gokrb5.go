@@ -303,6 +303,7 @@ func (c *Client) negotiateContext(host string, cl *client.Client) (string, time.
 	}
 
 	var payload messages.EncAPRepPart
+	payload.Subkey = key // Use current key as fallback if Subkey is not sent
 	if err = payload.Unmarshal(b); err != nil {
 		return "", time.Time{}, err
 	}
