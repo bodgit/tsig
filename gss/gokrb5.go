@@ -1,3 +1,4 @@
+//go:build !windows && !apcera
 // +build !windows,!apcera
 
 package gss
