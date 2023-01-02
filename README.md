@@ -1,5 +1,5 @@
 [![GitHub release](https://img.shields.io/github/v/release/bodgit/tsig)](https://github.com/bodgit/tsig/releases)
-[![Build Status](https://img.shields.io/github/workflow/status/bodgit/tsig/build)](https://github.com/bodgit/tsig/actions?query=workflow%3Abuild)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/bodgit/tsig/main.yml?branch=main)](https://github.com/bodgit/tsig/actions?query=workflow%3Abuild)
 [![Coverage Status](https://coveralls.io/repos/github/bodgit/tsig/badge.svg?branch=master)](https://coveralls.io/github/bodgit/tsig?branch=master)
 [![Go Report Card](https://goreportcard.com/badge/github.com/bodgit/tsig)](https://goreportcard.com/report/github.com/bodgit/tsig)
 [![GoDoc](https://godoc.org/github.com/bodgit/tsig?status.svg)](https://godoc.org/github.com/bodgit/tsig)
