@@ -6,6 +6,7 @@ package gss
 import (
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"math"
 	"net"
 	"os"
@@ -350,21 +351,26 @@ func findFile(env string, try []string) (string, error) {
 	path, ok := os.LookupEnv(env)
 	if ok {
 		if _, err := os.Stat(path); err != nil {
-			return "", err
+			return "", fmt.Errorf("%s: %w", env, err)
 		}
+
 		return path, nil
 	}
 
-	var errs error
+	errs := fmt.Errorf("%s: not found", env)
+
 	for _, t := range try {
 		_, err := os.Stat(t)
 		if err != nil {
 			errs = multierror.Append(errs, err)
+
 			if os.IsNotExist(err) {
 				continue
 			}
+
 			return "", errs
 		}
+
 		return t, nil
 	}
 
