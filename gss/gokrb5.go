@@ -6,6 +6,7 @@ package gss
 import (
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"math"
 	"net"
 	"os"
@@ -17,6 +18,7 @@ import (
 	"github.com/bodgit/tsig"
 	"github.com/bodgit/tsig/internal/util"
 	"github.com/go-logr/logr"
+	multierror "github.com/hashicorp/go-multierror"
 	"github.com/jcmturner/gokrb5/v8/client"
 	"github.com/jcmturner/gokrb5/v8/config"
 	"github.com/jcmturner/gokrb5/v8/credentials"
@@ -345,25 +347,44 @@ func loadCache() (*credentials.CCache, error) {
 	return cache, nil
 }
 
+func findFile(env string, try []string) (string, error) {
+	path, ok := os.LookupEnv(env)
+	if ok {
+		if _, err := os.Stat(path); err != nil {
+			return "", fmt.Errorf("%s: %w", env, err)
+		}
+
+		return path, nil
+	}
+
+	errs := fmt.Errorf("%s: not found", env)
+
+	for _, t := range try {
+		_, err := os.Stat(t)
+		if err != nil {
+			errs = multierror.Append(errs, err)
+
+			if os.IsNotExist(err) {
+				continue
+			}
+
+			return "", errs
+		}
+
+		return t, nil
+	}
+
+	return "", errs
+}
+
 func (c *Client) loadConfig() (*config.Config, error) {
 	if c.config != "" {
 		return config.NewFromString(c.config)
 	}
 
-	path := os.Getenv("KRB5_CONFIG")
-	_, err := os.Stat(path)
+	path, err := findFile("KRB5_CONFIG", []string{"/etc/krb5.conf"})
 	if err != nil {
-
-		// List of candidates to try
-		try := []string{"/etc/krb5.conf"}
-
-		for _, t := range try {
-			_, err := os.Stat(t)
-			if err == nil {
-				path = t
-				break
-			}
-		}
+		return nil, err
 	}
 
 	return config.Load(path)
