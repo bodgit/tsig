@@ -30,7 +30,7 @@ jobs:
       KRB5_CONFIG: /home/runner/work/tsig/tsig/testdata/docker/krb5.conf
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
@@ -76,7 +76,7 @@ jobs:
         with:
           parallel-finished: true
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: Set up Go
