@@ -1,5 +1,5 @@
-//go:build !windows && !apcera
-// +build !windows,!apcera
+//go:build windows
+// +build windows
 
 package gss_test
 
@@ -20,12 +20,12 @@ func TestExchangeCredentials(t *testing.T) {
 func TestExchangeKeytab(t *testing.T) {
 	t.Parallel()
 
-	assert.Nil(t, testExchangeKeytab(t))
+	assert.ErrorIs(t, testExchangeKeytab(t), gss.ErrNotSupported)
 }
 
 func TestNewClientWithConfig(t *testing.T) {
 	t.Parallel()
 
 	_, err := gss.NewClient(new(dns.Client), gss.WithConfig(""))
-	assert.Nil(t, err)
+	assert.NotNil(t, err)
 }

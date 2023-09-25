@@ -5,7 +5,6 @@ package gss
 
 import (
 	"encoding/hex"
-	"errors"
 	"net"
 	"sync"
 	"time"
@@ -28,18 +27,17 @@ type Client struct {
 	logger logr.Logger
 }
 
-// WithConfig sets the Kerberos configuration used
-func WithConfig(config string) func(*Client) error {
+// WithConfig sets the Kerberos configuration used.
+func WithConfig(_ string) func(*Client) error {
 	return func(c *Client) error {
 		return errNotSupported
 	}
 }
 
-// New performs any library initialization necessary.
+// NewClient performs any library initialization necessary.
 // It returns a context handle for any further functions along with any error
 // that occurred.
 func NewClient(dnsClient *dns.Client, options ...func(*Client) error) (*Client, error) {
-
 	client, err := util.CopyDNSClient(dnsClient)
 	if err != nil {
 		return nil, err
@@ -70,7 +68,6 @@ func NewClient(dnsClient *dns.Client, options ...func(*Client) error) (*Client, 
 // necessary.
 // It returns any error that occurred.
 func (c *Client) Close() error {
-
 	return multierror.Append(c.close(), c.lib.Unload())
 }
 
@@ -79,8 +76,7 @@ func (c *Client) Close() error {
 // record containing the algorithm and name which is the negotiated TKEY
 // for this context.
 // It returns the bytes for the TSIG MAC and any error that occurred.
-func (c *Client) Generate(msg []byte, t *dns.TSIG) ([]byte, error) {
-
+func (c *Client) Generate(msg []byte, t *dns.TSIG) (b []byte, err error) {
 	if dns.CanonicalName(t.Algorithm) != tsig.GSS {
 		return nil, dns.ErrKeyAlg
 	}
@@ -97,13 +93,19 @@ func (c *Client) Generate(msg []byte, t *dns.TSIG) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer message.Release()
+
+	defer func() {
+		err = multierror.Append(err, message.Release()).ErrorOrNil()
+	}()
 
 	token, err := ctx.GetMIC(gssapi.GSS_C_QOP_DEFAULT, message)
 	if err != nil {
 		return nil, err
 	}
-	defer token.Release()
+
+	defer func() {
+		err = multierror.Append(err, token.Release()).ErrorOrNil()
+	}()
 
 	return token.Bytes(), nil
 }
@@ -113,8 +115,7 @@ func (c *Client) Generate(msg []byte, t *dns.TSIG) ([]byte, error) {
 // containing the algorithm, MAC, and name which is the negotiated TKEY
 // for this context.
 // It returns any error that occurred.
-func (c *Client) Verify(stripped []byte, t *dns.TSIG) error {
-
+func (c *Client) Verify(stripped []byte, t *dns.TSIG) (err error) {
 	if dns.CanonicalName(t.Algorithm) != tsig.GSS {
 		return dns.ErrKeyAlg
 	}
@@ -132,7 +133,10 @@ func (c *Client) Verify(stripped []byte, t *dns.TSIG) error {
 	if err != nil {
 		return err
 	}
-	defer message.Release()
+
+	defer func() {
+		err = multierror.Append(err, message.Release()).ErrorOrNil()
+	}()
 
 	mac, err := hex.DecodeString(t.MAC)
 	if err != nil {
@@ -144,7 +148,10 @@ func (c *Client) Verify(stripped []byte, t *dns.TSIG) error {
 	if err != nil {
 		return err
 	}
-	defer token.Release()
+
+	defer func() {
+		err = multierror.Append(err, token.Release()).ErrorOrNil()
+	}()
 
 	// This is the actual verification bit
 	if _, err = ctx.VerifyMIC(message, token); err != nil {
@@ -158,30 +165,42 @@ func (c *Client) Verify(stripped []byte, t *dns.TSIG) error {
 // server to establish a security context using the current user.
 // It returns the negotiated TKEY name, expiration time, and any error that
 // occurred.
-func (c *Client) NegotiateContext(host string) (string, time.Time, error) {
-
+//
+//nolint:cyclop,funlen
+func (c *Client) NegotiateContext(host string) (keyname string, expiry time.Time, err error) {
 	hostname, _, err := net.SplitHostPort(host)
 	if err != nil {
 		return "", time.Time{}, err
 	}
 
-	keyname := generateTKEYName(hostname)
+	keyname, err = generateTKEYName(hostname)
+	if err != nil {
+		return "", time.Time{}, err
+	}
 
 	buffer, err := c.lib.MakeBufferString(generateSPN(hostname))
 	if err != nil {
 		return "", time.Time{}, err
 	}
-	defer buffer.Release()
+
+	defer func() {
+		err = multierror.Append(err, buffer.Release()).ErrorOrNil()
+	}()
 
 	service, err := buffer.Name(c.lib.GSS_KRB5_NT_PRINCIPAL_NAME)
 	if err != nil {
 		return "", time.Time{}, err
 	}
-	defer service.Release()
 
-	var input *gssapi.Buffer
-	var ctx *gssapi.CtxId
-	var tkey *dns.TKEY
+	defer func() {
+		err = multierror.Append(err, service.Release()).ErrorOrNil()
+	}()
+
+	var (
+		input *gssapi.Buffer
+		ctx   *gssapi.CtxId
+		tkey  *dns.TKEY
+	)
 
 	for ok := true; ok; ok = c.lib.LastStatus.Major.ContinueNeeded() {
 		nctx, _, output, _, _, err := c.lib.InitSecContext(
@@ -193,8 +212,13 @@ func (c *Client) NegotiateContext(host string) (string, time.Time, error) {
 			0,
 			c.lib.GSS_C_NO_CHANNEL_BINDINGS,
 			input)
-		defer output.Release()
+
 		ctx = nctx
+
+		defer func() {
+			err = multierror.Append(err, output.Release()).ErrorOrNil()
+		}()
+
 		if err != nil {
 			if !c.lib.LastStatus.Major.ContinueNeeded() {
 				return "", time.Time{}, err
@@ -204,37 +228,30 @@ func (c *Client) NegotiateContext(host string) (string, time.Time, error) {
 			break
 		}
 
-		var errs error
-
-		// We don't care about non-TKEY answers, no additional RR's to send, and no signing
+		//nolint:lll
 		if tkey, _, err = util.ExchangeTKEY(c.client, host, keyname, tsig.GSS, util.TkeyModeGSS, 3600, output.Bytes(), nil, "", ""); err != nil {
-			errs = multierror.Append(errs, err)
-			errs = multierror.Append(errs, ctx.DeleteSecContext())
-			return "", time.Time{}, errs
+			return "", time.Time{}, multierror.Append(err, ctx.DeleteSecContext())
 		}
 
 		if tkey.Header().Name != keyname {
-			errs = multierror.Append(errs, errors.New("TKEY name does not match"))
-			errs = multierror.Append(errs, ctx.DeleteSecContext())
-			return "", time.Time{}, errs
+			return "", time.Time{}, multierror.Append(errDoesNotMatch, ctx.DeleteSecContext())
 		}
 
 		key, err := hex.DecodeString(tkey.Key)
 		if err != nil {
-			errs = multierror.Append(errs, err)
-			errs = multierror.Append(errs, ctx.DeleteSecContext())
-			return "", time.Time{}, errs
+			return "", time.Time{}, multierror.Append(err, ctx.DeleteSecContext())
 		}
 
 		if input, err = c.lib.MakeBufferBytes(key); err != nil {
-			errs = multierror.Append(errs, err)
-			errs = multierror.Append(errs, ctx.DeleteSecContext())
-			return "", time.Time{}, errs
+			return "", time.Time{}, multierror.Append(err, ctx.DeleteSecContext())
 		}
-		defer input.Release()
+
+		defer func() {
+			err = multierror.Append(err, input.Release()).ErrorOrNil()
+		}()
 	}
 
-	expiry := time.Unix(int64(tkey.Expiration), 0)
+	expiry = time.Unix(int64(tkey.Expiration), 0)
 
 	c.m.Lock()
 	defer c.m.Unlock()
@@ -249,8 +266,7 @@ func (c *Client) NegotiateContext(host string) (string, time.Time, error) {
 // credentials.
 // It returns the negotiated TKEY name, expiration time, and any error that
 // occurred.
-func (c *Client) NegotiateContextWithCredentials(host, domain, username, password string) (string, time.Time, error) {
-
+func (c *Client) NegotiateContextWithCredentials(_, _, _, _ string) (string, time.Time, error) {
 	return "", time.Time{}, errNotSupported
 }
 
@@ -259,8 +275,7 @@ func (c *Client) NegotiateContextWithCredentials(host, domain, username, passwor
 // keytab.
 // It returns the negotiated TKEY name, expiration time, and any error that
 // occurred.
-func (c *Client) NegotiateContextWithKeytab(host, domain, username, path string) (string, time.Time, error) {
-
+func (c *Client) NegotiateContextWithKeytab(_, _, _, _ string) (string, time.Time, error) {
 	return "", time.Time{}, errNotSupported
 }
 
@@ -268,13 +283,12 @@ func (c *Client) NegotiateContextWithKeytab(host, domain, username, path string)
 // TKEY name.
 // It returns any error that occurred.
 func (c *Client) DeleteContext(keyname string) error {
-
 	c.m.Lock()
 	defer c.m.Unlock()
 
 	ctx, ok := c.ctx[keyname]
 	if !ok {
-		return errors.New("No such context")
+		return errNoSuchContext
 	}
 
 	if err := ctx.DeleteSecContext(); err != nil {

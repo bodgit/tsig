@@ -5,7 +5,6 @@ package gss
 
 import (
 	"encoding/hex"
-	"errors"
 	"net"
 	"sync"
 	"time"
@@ -28,10 +27,11 @@ type Client struct {
 	logger logr.Logger
 }
 
-// WithConfig sets the Kerberos configuration used
+// WithConfig sets the Kerberos configuration used.
 func WithConfig(config string) func(*Client) error {
 	return func(c *Client) error {
 		c.config = config
+
 		return nil
 	}
 }
@@ -40,7 +40,6 @@ func WithConfig(config string) func(*Client) error {
 // It returns a context handle for any further functions along with any error
 // that occurred.
 func NewClient(dnsClient *dns.Client, options ...func(*Client) error) (*Client, error) {
-
 	client, err := util.CopyDNSClient(dnsClient)
 	if err != nil {
 		return nil, err
@@ -65,7 +64,6 @@ func NewClient(dnsClient *dns.Client, options ...func(*Client) error) (*Client, 
 // necessary.
 // It returns any error that occurred.
 func (c *Client) Close() error {
-
 	return c.close()
 }
 
@@ -96,7 +94,6 @@ func (c *Client) Generate(msg []byte, t *dns.TSIG) ([]byte, error) {
 // for this context.
 // It returns any error that occurred.
 func (c *Client) Verify(stripped []byte, t *dns.TSIG) error {
-
 	if dns.CanonicalName(t.Algorithm) != tsig.GSS {
 		return dns.ErrKeyAlg
 	}
@@ -130,7 +127,10 @@ func (c *Client) negotiateContext(host string, options []wrapper.Option[wrapper.
 		return "", time.Time{}, err
 	}
 
-	keyname := generateTKEYName(hostname)
+	keyname, err := generateTKEYName(hostname)
+	if err != nil {
+		return "", time.Time{}, err
+	}
 
 	spn := generateSPN(hostname)
 
@@ -151,7 +151,7 @@ func (c *Client) negotiateContext(host string, options []wrapper.Option[wrapper.
 		}
 
 		if tkey.Header().Name != keyname {
-			return "", time.Time{}, errors.New("TKEY name does not match")
+			return "", time.Time{}, errDoesNotMatch
 		}
 
 		var input []byte
@@ -218,16 +218,17 @@ func (c *Client) NegotiateContextWithKeytab(host, domain, username, path string)
 // TKEY name.
 // It returns any error that occurred.
 func (c *Client) DeleteContext(keyname string) error {
-
 	c.m.Lock()
 	defer c.m.Unlock()
 
 	ctx, ok := c.ctx[keyname]
 	if !ok {
-		return errors.New("No such context")
+		return errNoSuchContext
 	}
 
-	ctx.Close()
+	if err := ctx.Close(); err != nil {
+		return err
+	}
 
 	delete(c.ctx, keyname)
 
