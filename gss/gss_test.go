@@ -10,6 +10,7 @@ import (
 
 	"github.com/bodgit/tsig"
 	"github.com/go-logr/logr"
+	"github.com/go-logr/logr/testr"
 	"github.com/miekg/dns"
 	"github.com/stretchr/testify/assert"
 )
@@ -73,7 +74,7 @@ func testExchange(t *testing.T) error {
 	dnsClient := new(dns.Client)
 	dnsClient.Net = "tcp"
 
-	gssClient, err := NewClient(dnsClient)
+	gssClient, err := NewClient(dnsClient, WithLogger(testr.New(t)))
 	if err != nil {
 		return err
 	}
@@ -124,7 +125,7 @@ func testExchangeCredentials(t *testing.T) error {
 	dnsClient := new(dns.Client)
 	dnsClient.Net = "tcp"
 
-	gssClient, err := NewClient(dnsClient)
+	gssClient, err := NewClient(dnsClient, WithLogger(testr.New(t)))
 	if err != nil {
 		return err
 	}
@@ -153,7 +154,7 @@ func testExchangeKeytab(t *testing.T) error {
 	dnsClient := new(dns.Client)
 	dnsClient.Net = "tcp"
 
-	gssClient, err := NewClient(dnsClient)
+	gssClient, err := NewClient(dnsClient, WithLogger(testr.New(t)))
 	if err != nil {
 		return err
 	}
