@@ -1,84 +1,108 @@
-package gss
+package gss_test
 
 import (
 	"fmt"
 	"net"
 	"os"
-	"regexp"
+	"runtime"
 	"testing"
 	"time"
 
 	"github.com/bodgit/tsig"
+	"github.com/bodgit/tsig/gss"
 	"github.com/go-logr/logr"
 	"github.com/go-logr/logr/testr"
+	multierror "github.com/hashicorp/go-multierror"
 	"github.com/miekg/dns"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestGenerateTKEYName(t *testing.T) {
-
-	tkey := generateTKEYName("host.example.com")
-	assert.Regexp(t, regexp.MustCompile("^\\d+\\.sig-host\\.example\\.com\\.$"), tkey)
-}
-
-func TestGenerateSPN(t *testing.T) {
-
-	spn := generateSPN("host.example.com")
-	assert.Equal(t, "DNS/host.example.com", spn)
-
-	spn = generateSPN("host.example.com.")
-	assert.Equal(t, "DNS/host.example.com", spn)
-}
+const dnsClientTransport = "tcp"
 
 func testEnvironmentVariables(t *testing.T) (string, string, string, string, string, string) {
-	host, ok := os.LookupEnv("DNS_HOST")
-	if !ok {
-		t.Fatal("$DNS_HOST not set")
+	t.Helper()
+
+	var (
+		host     string
+		port     = "53"
+		realm    string
+		username string
+		password string
+		keytab   string
+		errs     *multierror.Error
+	)
+
+	for _, env := range []struct {
+		ptr      *string
+		name     string
+		optional bool
+	}{
+		{
+			&host,
+			"DNS_HOST",
+			false,
+		},
+		{
+			&port,
+			"DNS_PORT",
+			true,
+		},
+		{
+			&realm,
+			"DNS_REALM",
+			false,
+		},
+		{
+			&username,
+			"DNS_USERNAME",
+			false,
+		},
+		{
+			&password,
+			"DNS_PASSWORD",
+			false,
+		},
+		{
+			&keytab,
+			"DNS_KEYTAB",
+			runtime.GOOS == "windows",
+		},
+	} {
+		if v, ok := os.LookupEnv(env.name); ok {
+			*env.ptr = v
+		} else if !env.optional {
+			errs = multierror.Append(errs, fmt.Errorf("%s is not set", env.name))
+		}
 	}
 
-	port, ok := os.LookupEnv("DNS_PORT")
-	if !ok {
-		port = "53"
-	}
-
-	realm, ok := os.LookupEnv("DNS_REALM")
-	if !ok {
-		t.Fatal("$DNS_REALM not set")
-	}
-
-	username, ok := os.LookupEnv("DNS_USERNAME")
-	if !ok {
-		t.Fatal("$DNS_USERNAME not set")
-	}
-
-	password, ok := os.LookupEnv("DNS_PASSWORD")
-	if !ok {
-		t.Fatal("$DNS_PASSWORD not set")
-	}
-
-	keytab, ok := os.LookupEnv("DNS_KEYTAB")
-	if !ok {
-		t.Fatal("$DNS_KEYTAB not set")
+	if errs.ErrorOrNil() != nil {
+		t.Fatal(errs)
 	}
 
 	return host, port, realm, username, password, keytab
 }
 
-func testExchange(t *testing.T) error {
+func testExchange(t *testing.T) (err error) {
+	t.Helper()
+
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
 
+	//nolint:dogsled
 	host, port, _, _, _, _ := testEnvironmentVariables(t)
 
 	dnsClient := new(dns.Client)
-	dnsClient.Net = "tcp"
+	dnsClient.Net = dnsClientTransport
 
-	gssClient, err := NewClient(dnsClient, WithLogger(testr.New(t)))
+	gssClient, err := gss.NewClient(dnsClient, gss.WithLogger(testr.New(t)))
 	if err != nil {
 		return err
 	}
-	defer gssClient.Close()
+
+	defer func() {
+		err = multierror.Append(err, gssClient.Close()).ErrorOrNil()
+	}()
 
 	keyname, _, err := gssClient.NegotiateContext(net.JoinHostPort(host, port))
 	if err != nil {
@@ -92,30 +116,28 @@ func testExchange(t *testing.T) error {
 
 	insert, err := dns.NewRR("test.example.com. 300 A 192.0.2.1")
 	if err != nil {
-		panic(err)
+		return err
 	}
+
 	msg.Insert([]dns.RR{insert})
 
 	msg.SetTsig(keyname, tsig.GSS, 300, time.Now().Unix())
 
 	rr, _, err := dnsClient.Exchange(msg, net.JoinHostPort(host, port))
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	if rr.Rcode != dns.RcodeSuccess {
 		return fmt.Errorf("DNS error: %s (%d)", dns.RcodeToString[rr.Rcode], rr.Rcode)
 	}
 
-	err = gssClient.DeleteContext(keyname)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return gssClient.DeleteContext(keyname)
 }
 
-func testExchangeCredentials(t *testing.T) error {
+func testExchangeCredentials(t *testing.T) (err error) {
+	t.Helper()
+
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
@@ -123,28 +145,32 @@ func testExchangeCredentials(t *testing.T) error {
 	host, port, realm, username, password, _ := testEnvironmentVariables(t)
 
 	dnsClient := new(dns.Client)
-	dnsClient.Net = "tcp"
+	dnsClient.Net = dnsClientTransport
 
-	gssClient, err := NewClient(dnsClient, WithLogger(testr.New(t)))
+	gssClient, err := gss.NewClient(dnsClient)
 	if err != nil {
 		return err
 	}
-	defer gssClient.Close()
+
+	defer func() {
+		err = multierror.Append(err, gssClient.Close()).ErrorOrNil()
+	}()
+
+	if err = gssClient.SetLogger(testr.New(t)); err != nil {
+		return err
+	}
 
 	keyname, _, err := gssClient.NegotiateContextWithCredentials(net.JoinHostPort(host, port), realm, username, password)
 	if err != nil {
 		return err
 	}
 
-	err = gssClient.DeleteContext(keyname)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return gssClient.DeleteContext(keyname)
 }
 
-func testExchangeKeytab(t *testing.T) error {
+func testExchangeKeytab(t *testing.T) (err error) {
+	t.Helper()
+
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
@@ -152,32 +178,34 @@ func testExchangeKeytab(t *testing.T) error {
 	host, port, realm, username, _, keytab := testEnvironmentVariables(t)
 
 	dnsClient := new(dns.Client)
-	dnsClient.Net = "tcp"
+	dnsClient.Net = dnsClientTransport
 
-	gssClient, err := NewClient(dnsClient, WithLogger(testr.New(t)))
+	gssClient, err := gss.NewClient(dnsClient, gss.WithLogger(testr.New(t)))
 	if err != nil {
 		return err
 	}
-	defer gssClient.Close()
+
+	defer func() {
+		err = multierror.Append(err, gssClient.Close()).ErrorOrNil()
+	}()
 
 	keyname, _, err := gssClient.NegotiateContextWithKeytab(net.JoinHostPort(host, port), realm, username, keytab)
 	if err != nil {
 		return err
 	}
 
-	err = gssClient.DeleteContext(keyname)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return gssClient.DeleteContext(keyname)
 }
 
 func TestExchange(t *testing.T) {
+	t.Parallel()
+
 	assert.Nil(t, testExchange(t))
 }
 
 func TestNewClientWithLogger(t *testing.T) {
-	_, err := NewClient(new(dns.Client), WithLogger(logr.Discard()))
+	t.Parallel()
+
+	_, err := gss.NewClient(new(dns.Client), gss.WithLogger(logr.Discard()))
 	assert.Nil(t, err)
 }

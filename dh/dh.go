@@ -3,69 +3,69 @@ Package dh implements RFC 2930 Diffie-Hellman key exchange functions.
 
 Example client:
 
-        import (
-                "fmt"
-                "time"
+	import (
+		"fmt"
+		"time"
 
-                "github.com/bodgit/tsig/dh"
-                "github.com/miekg/dns"
-        )
+		"github.com/bodgit/tsig/dh"
+		"github.com/miekg/dns"
+	)
 
-        func main() {
-                dnsClient := new(dns.Client)
-                dnsClient.Net = "tcp"
-                dnsClient.TsigSecret = map[string]string{"tsig.example.com.": "k9uK5qsPfbBxvVuldwzYww=="}
+	func main() {
+		dnsClient := new(dns.Client)
+		dnsClient.Net = "tcp"
+		dnsClient.TsigSecret = map[string]string{"tsig.example.com.": "k9uK5qsPfbBxvVuldwzYww=="}
 
-                dhClient, err := dh.NewClient(dnsClient)
-                if err != nil {
-                        panic(err)
-                }
-                defer dhClient.Close()
+		dhClient, err := dh.NewClient(dnsClient)
+		if err != nil {
+			panic(err)
+		}
+		defer dhClient.Close()
 
-                host := "ns.example.com:53"
+		host := "ns.example.com:53"
 
-                // Negotiate a key with the chosen server
-                keyname, mac, _, err := dhClient.NegotiateKey(host, "tsig.example.com.", dns.HmacMD5, "k9uK5qsPfbBxvVuldwzYww==")
-                if err != nil {
-                        panic(err)
-                }
+		// Negotiate a key with the chosen server
+		keyname, mac, _, err := dhClient.NegotiateKey(host, "tsig.example.com.", dns.HmacMD5, "k9uK5qsPfbBxvVuldwzYww==")
+		if err != nil {
+			panic(err)
+		}
 
-                dnsClient.TsigSecret[keyname] = mac
+		dnsClient.TsigSecret[keyname] = mac
 
-                // Use the DNS client as normal
+		// Use the DNS client as normal
 
-                msg := new(dns.Msg)
-                msg.SetUpdate(dns.Fqdn("example.com"))
+		msg := new(dns.Msg)
+		msg.SetUpdate(dns.Fqdn("example.com"))
 
-                insert, err := dns.NewRR("test.example.com. 300 A 192.0.2.1")
-                if err != nil {
-                        panic(err)
-                }
-                msg.Insert([]dns.RR{insert})
+		insert, err := dns.NewRR("test.example.com. 300 A 192.0.2.1")
+		if err != nil {
+			panic(err)
+		}
+		msg.Insert([]dns.RR{insert})
 
-                msg.SetTsig(keyname, dns.HmacMD5, 300, time.Now().Unix())
+		msg.SetTsig(keyname, dns.HmacMD5, 300, time.Now().Unix())
 
-                rr, _, err := dnsClient.Exchange(msg, host)
-                if err != nil {
-                        panic(err)
-                }
+		rr, _, err := dnsClient.Exchange(msg, host)
+		if err != nil {
+			panic(err)
+		}
 
-                if rr.Rcode != dns.RcodeSuccess {
-                        fmt.Printf("DNS error: %s (%d)\n", dns.RcodeToString[rr.Rcode], rr.Rcode)
-                }
+		if rr.Rcode != dns.RcodeSuccess {
+			fmt.Printf("DNS error: %s (%d)\n", dns.RcodeToString[rr.Rcode], rr.Rcode)
+		}
 
-                // Revoke the key
-                err = dhClient.DeleteKey(keyname)
-                if err != nil {
-                        panic(err)
-                }
-        }
+		// Revoke the key
+		err = dhClient.DeleteKey(keyname)
+		if err != nil {
+			panic(err)
+		}
+	}
 */
 package dh
 
 import (
 	"bytes"
-	"crypto/md5"
+	"crypto/md5" //nolint:gosec
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/binary"
@@ -85,7 +85,7 @@ import (
 )
 
 const (
-	// RFC 2409, section 6.2
+	// RFC 2409, section 6.2.
 	modp1024 = "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD1" +
 		"29024E088A67CC74020BBEA63B139B22514A08798E3404DD" +
 		"EF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245" +
@@ -111,7 +111,6 @@ type Client struct {
 }
 
 func dhGroup(group int) (*dh.Group, error) {
-
 	switch group {
 	case 2:
 		p, _ := new(big.Int).SetString(modp1024, 16)
@@ -121,7 +120,7 @@ func dhGroup(group int) (*dh.Group, error) {
 			G: new(big.Int).SetInt64(2),
 		}, nil
 	default:
-		return nil, fmt.Errorf("Unsupported DH group %v", group)
+		return nil, fmt.Errorf("unsupported DH group %v", group)
 	}
 }
 
@@ -129,7 +128,6 @@ func dhGroup(group int) (*dh.Group, error) {
 // It returns a context handle for any further functions along with any error
 // that occurred.
 func NewClient(dnsClient *dns.Client) (*Client, error) {
-
 	client, err := util.CopyDNSClient(dnsClient)
 	if err != nil {
 		return nil, err
@@ -147,36 +145,36 @@ func NewClient(dnsClient *dns.Client) (*Client, error) {
 // necessary.
 // It returns any error that occurred.
 func (c *Client) Close() error {
-
 	c.m.Lock()
+
 	keys := make([]string, 0, len(c.ctx))
 	for k := range c.ctx {
 		keys = append(keys, k)
 	}
+
 	c.m.Unlock()
 
-	var errs error
+	var errs *multierror.Error
 	for _, k := range keys {
 		errs = multierror.Append(errs, c.DeleteKey(k))
 	}
 
-	return errs
+	return errs.ErrorOrNil()
 }
 
 func readDHKey(raw []byte) (*dhkey, error) {
-
 	var key dhkey
 
 	r := bytes.NewBuffer(raw)
 
-	var len uint16
+	var l uint16
 	for _, f := range []*[]byte{&key.prime, &key.generator, &key.key} {
-		err := binary.Read(r, binary.BigEndian, &len)
+		err := binary.Read(r, binary.BigEndian, &l)
 		if err != nil {
 			return nil, err
 		}
 
-		*f = make([]byte, len)
+		*f = make([]byte, l)
 		if _, err = io.ReadFull(r, *f); err != nil {
 			return nil, err
 		}
@@ -186,13 +184,12 @@ func readDHKey(raw []byte) (*dhkey, error) {
 }
 
 func writeDHKey(key *dhkey) ([]byte, error) {
-
 	w := new(bytes.Buffer)
 
 	for _, f := range []*[]byte{&key.prime, &key.generator, &key.key} {
-		len := uint16(len(*f))
+		l := uint16(len(*f))
 
-		err := binary.Write(w, binary.BigEndian, len)
+		err := binary.Write(w, binary.BigEndian, l)
 		if err != nil {
 			return nil, err
 		}
@@ -206,26 +203,27 @@ func writeDHKey(key *dhkey) ([]byte, error) {
 }
 
 func computeMD5(nonce, secret []byte) []byte {
-
+	//nolint:gosec
 	checksum := md5.Sum(append(nonce, secret...))
 
 	return checksum[:]
 }
 
 func computeDHKey(ourNonce, peerNonce, secret []byte) []byte {
-
 	operand := append(computeMD5(ourNonce, secret), computeMD5(peerNonce, secret)...)
 
 	var result []byte
 	if len(secret) > len(operand) {
 		result = make([]byte, len(secret))
 		copy(result, secret)
+
 		for i := 0; i < len(operand); i++ {
 			result[i] ^= operand[i]
 		}
 	} else {
 		result = make([]byte, len(operand))
 		copy(result, operand)
+
 		for i := 0; i < len(secret); i++ {
 			result[i] ^= secret[i]
 		}
@@ -239,8 +237,9 @@ func computeDHKey(ourNonce, peerNonce, secret []byte) []byte {
 // algorithm and MAC.
 // It returns the negotiated TKEY name, MAC, expiry time, and any error that
 // occurred.
+//
+//nolint:cyclop,funlen
 func (c *Client) NegotiateKey(host, name, algorithm, mac string) (string, string, time.Time, error) {
-
 	keyname := "."
 
 	g, err := dhGroup(2)
@@ -288,15 +287,16 @@ func (c *Client) NegotiateKey(host, name, algorithm, mac string) (string, string
 	c.client.TsigSecret[name] = mac
 	defer delete(c.client.TsigSecret, name)
 
+	//nolint:lll
 	tkey, keys, err := util.ExchangeTKEY(c.client, host, keyname, dns.HmacMD5, util.TkeyModeDH, 3600, an, extra, name, algorithm)
 	if err != nil {
 		return "", "", time.Time{}, err
 	}
 
 	var bkey []byte
+
 	for _, k := range keys {
-		switch key := k.(type) {
-		case *dns.KEY:
+		if key, ok := k.(*dns.KEY); ok {
 			if key.Header().Name != keyname && key.Algorithm == dns.DH {
 				if bkey, err = base64.StdEncoding.DecodeString(key.PublicKey); err != nil {
 					return "", "", time.Time{}, err
@@ -306,13 +306,14 @@ func (c *Client) NegotiateKey(host, name, algorithm, mac string) (string, string
 	}
 
 	if bkey == nil {
-		return "", "", time.Time{}, errors.New("No peer KEY record")
+		return "", "", time.Time{}, errors.New("no peer KEY record")
 	}
 
 	bdh, err := readDHKey(bkey)
 	if err != nil {
 		return "", "", time.Time{}, err
 	}
+
 	by := new(big.Int).SetBytes(bdh.key)
 
 	err = g.Check(by)
@@ -347,19 +348,20 @@ func (c *Client) NegotiateKey(host, name, algorithm, mac string) (string, string
 // DeleteKey revokes the active key associated with the given TKEY name.
 // It returns any error that occurred.
 func (c *Client) DeleteKey(keyname string) error {
-
 	c.m.Lock()
 	defer c.m.Unlock()
 
 	ctx, ok := c.ctx[keyname]
 	if !ok {
-		return errors.New("No such context")
+		return errors.New("no such context")
 	}
 
 	c.client.TsigSecret[keyname] = ctx.mac
 	defer delete(c.client.TsigSecret, keyname)
 
 	// Delete the key, signing the query with the key itself
+	//
+	//nolint:lll
 	if _, _, err := util.ExchangeTKEY(c.client, ctx.host, keyname, ctx.algorithm, util.TkeyModeDelete, 0, nil, nil, keyname, ctx.algorithm); err != nil {
 		return err
 	}

@@ -1,10 +1,12 @@
-package util
+package util_test
 
 import (
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/bodgit/tsig"
+	"github.com/bodgit/tsig/internal/util"
 	"github.com/miekg/dns"
 	"github.com/stretchr/testify/assert"
 )
@@ -15,8 +17,7 @@ type FakeClient struct {
 	Err      error
 }
 
-func (c *FakeClient) Exchange(m *dns.Msg, address string) (*dns.Msg, time.Duration, error) {
-
+func (c *FakeClient) Exchange(_ *dns.Msg, _ string) (*dns.Msg, time.Duration, error) {
 	if c.Err != nil {
 		return nil, 0, c.Err
 	}
@@ -24,28 +25,9 @@ func (c *FakeClient) Exchange(m *dns.Msg, address string) (*dns.Msg, time.Durati
 	return c.Msg, c.Duration, nil
 }
 
-func TestCalculateTimes(t *testing.T) {
-
-	lifetime := uint32(3600)
-
-	t0, t1, err := calculateTimes(TkeyModeDH, lifetime)
-	assert.Nil(t, err)
-	assert.Equal(t, lifetime, t1-t0)
-
-	t0, t1, err = calculateTimes(TkeyModeGSS, lifetime)
-	assert.Nil(t, err)
-	assert.Equal(t, lifetime, t1-t0)
-
-	t0, t1, err = calculateTimes(TkeyModeDelete, lifetime)
-	assert.Nil(t, err)
-	assert.Equal(t, uint32(0), t0)
-	assert.Equal(t, uint32(0), t1)
-
-	_, _, err = calculateTimes(TkeyModeServer, lifetime)
-	assert.NotNil(t, err)
-}
-
+//nolint:funlen
 func TestExchangeTKEY(t *testing.T) {
+	t.Parallel()
 
 	now := uint32(time.Now().Unix())
 
@@ -57,14 +39,15 @@ func TestExchangeTKEY(t *testing.T) {
 			Ttl:    0,
 		},
 		Algorithm:  tsig.GSS,
-		Mode:       TkeyModeGSS,
+		Mode:       util.TkeyModeGSS,
 		Inception:  now,
 		Expiration: now + 3600,
 		KeySize:    4,
 		Key:        "deadbeef",
 	}
 
-	tables := map[string]struct {
+	tables := []struct {
+		name               string
 		client             FakeClient
 		host               string
 		keyname            string
@@ -79,7 +62,8 @@ func TestExchangeTKEY(t *testing.T) {
 		expectedAdditional []dns.RR
 		expectedErr        error
 	}{
-		"ok": {
+		{
+			name: "ok",
 			client: FakeClient{
 				Msg: &dns.Msg{
 					Answer: []dns.RR{
@@ -92,7 +76,7 @@ func TestExchangeTKEY(t *testing.T) {
 			host:               "ns.example.com.",
 			keyname:            "test.example.com.",
 			algorithm:          tsig.GSS,
-			mode:               TkeyModeGSS,
+			mode:               util.TkeyModeGSS,
 			lifetime:           3600,
 			expectedTKEY:       goodTKEY,
 			expectedAdditional: []dns.RR{},
@@ -100,12 +84,80 @@ func TestExchangeTKEY(t *testing.T) {
 		},
 	}
 
-	for name, table := range tables {
-		t.Run(name, func(t *testing.T) {
-			tkey, additional, err := ExchangeTKEY(&table.client, table.host, table.keyname, table.algorithm, table.mode, table.lifetime, table.input, table.extra, table.tsigname, table.tsigalgo)
+	for _, table := range tables {
+		table := table
+		t.Run(table.name, func(t *testing.T) {
+			t.Parallel()
+			//nolint:lll
+			tkey, additional, err := util.ExchangeTKEY(&table.client, table.host, table.keyname, table.algorithm, table.mode, table.lifetime, table.input, table.extra, table.tsigname, table.tsigalgo)
 			assert.Equal(t, table.expectedTKEY, tkey)
 			assert.Equal(t, table.expectedAdditional, additional)
 			assert.Equal(t, table.expectedErr, err)
+		})
+	}
+}
+
+//nolint:funlen
+func TestCopyDNSClient(t *testing.T) {
+	t.Parallel()
+
+	tables := []struct {
+		name   string
+		client dns.Client
+		net    string
+		err    error
+	}{
+		{
+			"tcp",
+			dns.Client{
+				Net: "tcp",
+			},
+			"tcp",
+			nil,
+		},
+		{
+			"udp",
+			dns.Client{
+				Net: "udp",
+			},
+			"tcp",
+			nil,
+		},
+		{
+			"udp4",
+			dns.Client{
+				Net: "udp4",
+			},
+			"tcp4",
+			nil,
+		},
+		{
+			"udp6",
+			dns.Client{
+				Net: "udp6",
+			},
+			"tcp6",
+			nil,
+		},
+		{
+			"invalid",
+			dns.Client{
+				Net: "invalid",
+			},
+			"tcp6",
+			errors.New("unsupported transport 'invalid'"),
+		},
+	}
+
+	for _, table := range tables {
+		table := table
+		t.Run(table.name, func(t *testing.T) {
+			t.Parallel()
+			client, err := util.CopyDNSClient(&table.client)
+			if table.err == nil {
+				assert.Equal(t, table.net, client.Net)
+			}
+			assert.Equal(t, table.err, err)
 		})
 	}
 }

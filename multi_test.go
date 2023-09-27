@@ -1,16 +1,17 @@
-package tsig
+package tsig_test
 
 import (
 	"errors"
 	"testing"
 
+	"github.com/bodgit/tsig"
 	"github.com/miekg/dns"
 	"github.com/stretchr/testify/assert"
 )
 
 var (
 	errProvider   = errors.New("provider error")
-	testSignature = []byte("a good signature")
+	testSignature = []byte("a good signature") //nolint:gochecknoglobals
 )
 
 type unsupportedProvider struct{}
@@ -44,40 +45,50 @@ func (testProvider) Verify(_ []byte, _ *dns.TSIG) error {
 }
 
 func TestMultiProviderGenerate(t *testing.T) {
-	tables := map[string]struct {
+	t.Parallel()
+
+	tables := []struct {
+		name      string
 		provider  dns.TsigProvider
 		signature []byte
 		err       error
 	}{
-		"good": {
-			MultiProvider(new(testProvider)),
+		{
+			"good",
+			tsig.MultiProvider(new(testProvider)),
 			testSignature,
 			nil,
 		},
-		"unsupported good": {
-			MultiProvider(new(unsupportedProvider), new(testProvider)),
+		{
+			"unsupported good",
+			tsig.MultiProvider(new(unsupportedProvider), new(testProvider)),
 			testSignature,
 			nil,
 		},
-		"error good": {
-			MultiProvider(new(errorProvider), new(testProvider)),
+		{
+			"error good",
+			tsig.MultiProvider(new(errorProvider), new(testProvider)),
 			nil,
 			errProvider,
 		},
-		"all unsupported": {
-			MultiProvider(new(unsupportedProvider)),
+		{
+			"all unsupported",
+			tsig.MultiProvider(new(unsupportedProvider)),
 			nil,
 			dns.ErrKeyAlg,
 		},
-		"nested": {
-			MultiProvider(MultiProvider(new(testProvider))),
+		{
+			"nested",
+			tsig.MultiProvider(tsig.MultiProvider(new(testProvider))),
 			testSignature,
 			nil,
 		},
 	}
 
-	for name, table := range tables {
-		t.Run(name, func(t *testing.T) {
+	for _, table := range tables {
+		table := table
+		t.Run(table.name, func(t *testing.T) {
+			t.Parallel()
 			b, err := table.provider.Generate(nil, nil)
 			assert.Equal(t, table.signature, b)
 			assert.Equal(t, table.err, err)
@@ -86,30 +97,39 @@ func TestMultiProviderGenerate(t *testing.T) {
 }
 
 func TestMultiProviderVerify(t *testing.T) {
-	tables := map[string]struct {
+	t.Parallel()
+
+	tables := []struct {
+		name     string
 		provider dns.TsigProvider
 		err      error
 	}{
-		"good": {
-			MultiProvider(new(testProvider)),
+		{
+			"good",
+			tsig.MultiProvider(new(testProvider)),
 			nil,
 		},
-		"unsupported good": {
-			MultiProvider(new(unsupportedProvider), new(testProvider)),
+		{
+			"unsupported good",
+			tsig.MultiProvider(new(unsupportedProvider), new(testProvider)),
 			nil,
 		},
-		"error good": {
-			MultiProvider(new(errorProvider), new(testProvider)),
+		{
+			"error good",
+			tsig.MultiProvider(new(errorProvider), new(testProvider)),
 			errProvider,
 		},
-		"all unsuppored": {
-			MultiProvider(new(unsupportedProvider)),
+		{
+			"all unsuppored",
+			tsig.MultiProvider(new(unsupportedProvider)),
 			dns.ErrKeyAlg,
 		},
 	}
 
-	for name, table := range tables {
-		t.Run(name, func(t *testing.T) {
+	for _, table := range tables {
+		table := table
+		t.Run(table.name, func(t *testing.T) {
+			t.Parallel()
 			err := table.provider.Verify(nil, nil)
 			assert.Equal(t, table.err, err)
 		})
