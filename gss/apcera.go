@@ -203,7 +203,7 @@ func (c *Client) NegotiateContext(host string) (keyname string, expiry time.Time
 	)
 
 	for ok := true; ok; ok = c.lib.LastStatus.Major.ContinueNeeded() {
-		nctx, _, output, _, _, err := c.lib.InitSecContext(
+		nctx, _, output, _, endTime, err := c.lib.InitSecContext(
 			c.lib.GSS_C_NO_CREDENTIAL,
 			ctx, // nil initially
 			service,
@@ -212,6 +212,8 @@ func (c *Client) NegotiateContext(host string) (keyname string, expiry time.Time
 			0,
 			c.lib.GSS_C_NO_CHANNEL_BINDINGS,
 			input)
+
+		c.logger.Info("endTime", "time", endTime)
 
 		ctx = nctx
 
@@ -252,6 +254,8 @@ func (c *Client) NegotiateContext(host string) (keyname string, expiry time.Time
 	}
 
 	expiry = time.Unix(int64(tkey.Expiration), 0)
+
+	c.logger.Info("expiry", "time", expiry)
 
 	c.m.Lock()
 	defer c.m.Unlock()
