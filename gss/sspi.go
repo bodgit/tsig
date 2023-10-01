@@ -65,60 +65,14 @@ func (c *Client) Close() error {
 	return c.close()
 }
 
-// Generate generates the TSIG MAC based on the established context.
-// It is called with the bytes of the DNS message, and the partial TSIG
-// record containing the algorithm and name which is the negotiated TKEY
-// for this context.
-// It returns the bytes for the TSIG MAC and any error that occurred.
-func (c *Client) Generate(msg []byte, t *dns.TSIG) ([]byte, error) {
-	if dns.CanonicalName(t.Algorithm) != tsig.GSS {
-		return nil, dns.ErrKeyAlg
-	}
-
-	c.m.RLock()
-	defer c.m.RUnlock()
-
-	ctx, ok := c.ctx[t.Hdr.Name]
-	if !ok {
-		return nil, dns.ErrSecret
-	}
-
-	token, err := ctx.MakeSignature(msg, 0, 0)
-	if err != nil {
-		return nil, err
-	}
-
-	return token, nil
+func (c *Client) generate(ctx *negotiate.ClientContext, msg []byte) ([]byte, error) {
+	return ctx.MakeSignature(msg, 0, 0)
 }
 
-// Verify verifies the TSIG MAC based on the established context.
-// It is called with the bytes of the DNS message, and the TSIG record
-// containing the algorithm, MAC, and name which is the negotiated TKEY
-// for this context.
-// It returns any error that occurred.
-func (c *Client) Verify(stripped []byte, t *dns.TSIG) error {
-	if dns.CanonicalName(t.Algorithm) != tsig.GSS {
-		return dns.ErrKeyAlg
-	}
+func (c *Client) verify(ctx *negotiate.ClientContext, stripped, mac []byte) error {
+	_, err := ctx.VerifySignature(stripped, mac, 0)
 
-	c.m.RLock()
-	defer c.m.RUnlock()
-
-	ctx, ok := c.ctx[t.Hdr.Name]
-	if !ok {
-		return dns.ErrSecret
-	}
-
-	token, err := hex.DecodeString(t.MAC)
-	if err != nil {
-		return err
-	}
-
-	if _, err = ctx.VerifySignature(stripped, token, 0); err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
 func (c *Client) negotiateContext(host string, creds *sspi.Credentials) (string, time.Time, error) {

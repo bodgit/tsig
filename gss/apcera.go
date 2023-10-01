@@ -71,24 +71,7 @@ func (c *Client) Close() error {
 	return multierror.Append(c.close(), c.lib.Unload())
 }
 
-// Generate generates the TSIG MAC based on the established context.
-// It is called with the bytes of the DNS message, and the partial TSIG
-// record containing the algorithm and name which is the negotiated TKEY
-// for this context.
-// It returns the bytes for the TSIG MAC and any error that occurred.
-func (c *Client) Generate(msg []byte, t *dns.TSIG) (b []byte, err error) {
-	if dns.CanonicalName(t.Algorithm) != tsig.GSS {
-		return nil, dns.ErrKeyAlg
-	}
-
-	c.m.RLock()
-	defer c.m.RUnlock()
-
-	ctx, ok := c.ctx[t.Hdr.Name]
-	if !ok {
-		return nil, dns.ErrSecret
-	}
-
+func (c *Client) generate(ctx *gssapi.CtxId, msg []byte) ([]byte, error) {
 	message, err := c.lib.MakeBufferBytes(msg)
 	if err != nil {
 		return nil, err
@@ -110,24 +93,7 @@ func (c *Client) Generate(msg []byte, t *dns.TSIG) (b []byte, err error) {
 	return token.Bytes(), nil
 }
 
-// Verify verifies the TSIG MAC based on the established context.
-// It is called with the bytes of the DNS message, and the TSIG record
-// containing the algorithm, MAC, and name which is the negotiated TKEY
-// for this context.
-// It returns any error that occurred.
-func (c *Client) Verify(stripped []byte, t *dns.TSIG) (err error) {
-	if dns.CanonicalName(t.Algorithm) != tsig.GSS {
-		return dns.ErrKeyAlg
-	}
-
-	c.m.RLock()
-	defer c.m.RUnlock()
-
-	ctx, ok := c.ctx[t.Hdr.Name]
-	if !ok {
-		return dns.ErrSecret
-	}
-
+func (c *Client) verify(ctx *gssapi.CtxId, stripped, mac []byte) error {
 	// Turn the TSIG-stripped message bytes into a *gssapi.Buffer
 	message, err := c.lib.MakeBufferBytes(stripped)
 	if err != nil {
@@ -137,11 +103,6 @@ func (c *Client) Verify(stripped []byte, t *dns.TSIG) (err error) {
 	defer func() {
 		err = multierror.Append(err, message.Release()).ErrorOrNil()
 	}()
-
-	mac, err := hex.DecodeString(t.MAC)
-	if err != nil {
-		return err
-	}
 
 	// Turn the TSIG MAC bytes into a *gssapi.Buffer
 	token, err := c.lib.MakeBufferBytes(mac)
