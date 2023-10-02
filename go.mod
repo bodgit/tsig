@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/alexbrainman/sspi v0.0.0-20180613141037-e580b900e9f5
-	github.com/bodgit/gssapi v0.0.1
+	github.com/bodgit/gssapi v0.0.2
 	github.com/enceve/crypto v0.0.0-20160707101852-34d48bb93815
 	github.com/go-logr/logr v1.2.4
 	github.com/hashicorp/go-multierror v1.1.1
@@ -25,10 +25,12 @@ require (
 	github.com/jcmturner/goidentity/v6 v6.0.1 // indirect
 	github.com/jcmturner/rpc/v2 v2.0.3 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/spf13/afero v1.10.0 // indirect
 	golang.org/x/crypto v0.13.0 // indirect
 	golang.org/x/mod v0.12.0 // indirect
 	golang.org/x/net v0.15.0 // indirect
 	golang.org/x/sys v0.12.0 // indirect
+	golang.org/x/text v0.13.0 // indirect
 	golang.org/x/tools v0.13.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
