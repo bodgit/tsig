@@ -160,11 +160,10 @@ func (c *Client) NegotiateContext(host string) (keyname string, expiry time.Time
 	var (
 		input *gssapi.Buffer
 		ctx   *gssapi.CtxId
-		tkey  *dns.TKEY
 	)
 
 	for ok := true; ok; ok = c.lib.LastStatus.Major.ContinueNeeded() {
-		nctx, _, output, _, _, err := c.lib.InitSecContext(
+		nctx, _, output, _, duration, err := c.lib.InitSecContext(
 			c.lib.GSS_C_NO_CREDENTIAL,
 			ctx, // nil initially
 			service,
@@ -174,7 +173,7 @@ func (c *Client) NegotiateContext(host string) (keyname string, expiry time.Time
 			c.lib.GSS_C_NO_CHANNEL_BINDINGS,
 			input)
 
-		ctx = nctx
+		ctx, expiry = nctx, time.Now().UTC().Add(duration)
 
 		defer func() {
 			err = multierror.Append(err, output.Release()).ErrorOrNil()
@@ -190,7 +189,8 @@ func (c *Client) NegotiateContext(host string) (keyname string, expiry time.Time
 		}
 
 		//nolint:lll
-		if tkey, _, err = util.ExchangeTKEY(c.client, host, keyname, tsig.GSS, util.TkeyModeGSS, 3600, output.Bytes(), nil, "", ""); err != nil {
+		tkey, _, err := util.ExchangeTKEY(c.client, host, keyname, tsig.GSS, util.TkeyModeGSS, 3600, output.Bytes(), nil, "", "")
+		if err != nil {
 			return "", time.Time{}, multierror.Append(err, ctx.DeleteSecContext())
 		}
 
@@ -211,8 +211,6 @@ func (c *Client) NegotiateContext(host string) (keyname string, expiry time.Time
 			err = multierror.Append(err, input.Release()).ErrorOrNil()
 		}()
 	}
-
-	expiry = time.Unix(int64(tkey.Expiration), 0)
 
 	c.m.Lock()
 	defer c.m.Unlock()

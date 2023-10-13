@@ -127,14 +127,12 @@ func (c *Client) negotiateContext(host string, options []wrapper.Option[wrapper.
 		}
 	}
 
-	expiry := time.Unix(int64(tkey.Expiration), 0)
-
 	c.m.Lock()
 	defer c.m.Unlock()
 
 	c.ctx[keyname] = ctx
 
-	return keyname, expiry, nil
+	return keyname, ctx.Expiry(), nil
 }
 
 // NegotiateContext exchanges RFC 2930 TKEY records with the indicated DNS
