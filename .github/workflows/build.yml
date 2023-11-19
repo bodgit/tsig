@@ -63,6 +63,7 @@ jobs:
 
       - name: Install Kerberos client
         run: |
+          sudo apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -yq libkrb5-dev krb5-user
 
       - name: Set up Docker Buildx
