@@ -28,16 +28,14 @@ type Client struct {
 }
 
 // WithConfig sets the Kerberos configuration used.
-func WithConfig(_ string) func(*Client) error {
-	return func(c *Client) error {
-		return errNotSupported
-	}
+func WithConfig[T Client](_ string) Option[T] {
+	return unsupportedOption[T]
 }
 
 // NewClient performs any library initialization necessary.
 // It returns a context handle for any further functions along with any error
 // that occurred.
-func NewClient(dnsClient *dns.Client, options ...func(*Client) error) (*Client, error) {
+func NewClient(dnsClient *dns.Client, options ...Option[Client]) (*Client, error) {
 	client, err := util.CopyDNSClient(dnsClient)
 	if err != nil {
 		return nil, err
@@ -51,8 +49,10 @@ func NewClient(dnsClient *dns.Client, options ...func(*Client) error) (*Client, 
 		logger: logr.Discard(),
 	}
 
-	if err := c.setOption(options...); err != nil {
-		return nil, err
+	for _, option := range options {
+		if err := option(c); err != nil {
+			return nil, err
+		}
 	}
 
 	return c, nil
@@ -189,4 +189,87 @@ func (c *Client) DeleteContext(keyname string) error {
 	delete(c.ctx, keyname)
 
 	return nil
+}
+
+type serverContext struct {
+	*negotiate.ServerContext
+	established bool
+}
+
+// Server maps the TKEY name to the context that negotiated it as
+// well as any other internal state.
+type Server struct {
+	m      sync.RWMutex
+	ctx    map[string]*serverContext
+	logger logr.Logger
+}
+
+// NewServer performs any library initialization necessary.
+// It returns a context handle for any further functions along with any error
+// that occurred.
+func NewServer(options ...Option[Server]) (*Server, error) {
+	s := &Server{
+		ctx:    make(map[string]*serverContext),
+		logger: logr.Discard(),
+	}
+
+	for _, option := range options {
+		if err := option(s); err != nil {
+			return nil, err
+		}
+	}
+
+	return s, nil
+}
+
+// Close deletes any active contexts and unloads any underlying libraries as
+// necessary.
+// It returns any error that occurred.
+func (s *Server) Close() error {
+	return s.close(true)
+}
+
+func (s *Server) newContext() (*serverContext, error) {
+	return new(serverContext), nil
+}
+
+func (s *Server) update(ctx *serverContext, input []byte) (nctx *serverContext, output []byte, err error) {
+	if ctx.ServerContext == nil {
+		creds, err := negotiate.AcquireServerCredentials("")
+		if err != nil {
+			return nil, nil, err
+		}
+
+		defer func() {
+			err = multierror.Append(err, creds.Release()).ErrorOrNil()
+		}()
+
+		ctx.ServerContext, ctx.established, output, err = negotiate.NewServerContext(creds, input)
+	} else {
+		ctx.established, output, err = ctx.Update(input)
+	}
+
+	return ctx, output, err
+}
+
+func (s *Server) generate(ctx *serverContext, msg []byte) ([]byte, error) {
+	return ctx.MakeSignature(msg, 0, 0)
+}
+
+func (s *Server) verify(ctx *serverContext, stripped, mac []byte) error {
+	_, err := ctx.VerifySignature(stripped, mac, 0)
+
+	return err
+}
+
+func (s *Server) established(ctx *serverContext) (bool, error) {
+	return ctx.established, nil
+}
+
+func (s *Server) expired(ctx *serverContext) (bool, error) {
+	return ctx.Expiry().Before(time.Now()), nil
+}
+
+func (s *Server) delete(ctx *serverContext) error {
+	return ctx.Release()
 }
