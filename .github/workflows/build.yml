@@ -18,8 +18,8 @@ jobs:
       fail-fast: false
       matrix:
         go:
-          - '1.19'
-          - '1.20'
+          - '1.21'
+          - '1.22'
 
     env:
       DNS_HOST: ns.example.com
@@ -131,10 +131,8 @@ jobs:
 
       - name: Install coverage tools
         run: |
-          go get github.com/wadey/gocovmerge
-          go get github.com/mattn/goveralls
-        env:
-          GO111MODULE: off
+          go install github.com/wadey/gocovmerge@latest
+          go install github.com/mattn/goveralls@latest
 
       - name: Merge coverage reports
         run: gocovmerge gokrb5.out apcera.out >cover.out
