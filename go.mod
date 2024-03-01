@@ -12,7 +12,7 @@ require (
 	github.com/jinzhu/copier v0.4.0
 	github.com/miekg/dns v1.1.58
 	github.com/openshift/gssapi v0.0.0-20161010215902-5fb4217df13b
-	github.com/stretchr/testify v1.8.4
+	github.com/stretchr/testify v1.9.0
 )
 
 require (
