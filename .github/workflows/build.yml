@@ -70,7 +70,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build KDC image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: "{{defaultContext}}:testdata"
           load: true
@@ -80,7 +80,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build DNS image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: "{{defaultContext}}:testdata"
           load: true
@@ -90,7 +90,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Extract keytab
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: "{{defaultContext}}:testdata"
           outputs: type=local,dest=testdata
