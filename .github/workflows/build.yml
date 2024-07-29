@@ -46,20 +46,20 @@ jobs:
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -yq libkrb5-dev krb5-user
 
       - name: golangci-lint (gokrb5)
-        uses: golangci/golangci-lint-action@v5
+        uses: golangci/golangci-lint-action@v6
         if: github.event_name == 'pull_request'
         with:
           only-new-issues: true
 
       - name: golangci-lint (apcera)
-        uses: golangci/golangci-lint-action@v5
+        uses: golangci/golangci-lint-action@v6
         if: github.event_name == 'pull_request'
         with:
           only-new-issues: true
           args: --build-tags apcera
 
       - name: golangci-lint (SSPI)
-        uses: golangci/golangci-lint-action@v5
+        uses: golangci/golangci-lint-action@v6
         if: github.event_name == 'pull_request'
         with:
           only-new-issues: true
