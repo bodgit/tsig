@@ -1,4 +1,4 @@
-FROM rockylinux/rockylinux:9-ubi-init as kdc
+FROM rockylinux/rockylinux:9-ubi-init AS kdc
 
 EXPOSE 8088
 EXPOSE 8464
@@ -21,7 +21,7 @@ RUN kadmin.local ktadd -norandkey -k /etc/test.keytab test
 RUN kadmin.local addprinc -randkey DNS/ns.example.com
 RUN kadmin.local ktadd -k /etc/dns.keytab DNS/ns.example.com
 
-FROM rockylinux/rockylinux:9-ubi-init as ns
+FROM rockylinux/rockylinux:9-ubi-init AS ns
 
 EXPOSE 8053
 
@@ -40,6 +40,6 @@ RUN chmod 640 /etc/named.conf
 COPY --chown=named:named db.* /var/named/dynamic/
 RUN chmod 644 /var/named/dynamic/db.*
 
-FROM scratch as keytab
+FROM scratch AS keytab
 COPY --from=kdc /etc/test.keytab /test.keytab
 COPY --from=kdc /etc/dns.keytab /dns.keytab
