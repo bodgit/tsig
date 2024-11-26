@@ -28,9 +28,11 @@ type Client struct {
 }
 
 // WithConfig sets the Kerberos configuration used.
-func WithConfig(config string) func(*Client) error {
-	return func(c *Client) error {
-		c.config = config
+func WithConfig[T Client](config string) Option[T] {
+	return func(a *T) error {
+		if x, ok := any(a).(*Client); ok {
+			x.config = config
+		}
 
 		return nil
 	}
@@ -39,7 +41,7 @@ func WithConfig(config string) func(*Client) error {
 // NewClient performs any library initialization necessary.
 // It returns a context handle for any further functions along with any error
 // that occurred.
-func NewClient(dnsClient *dns.Client, options ...func(*Client) error) (*Client, error) {
+func NewClient(dnsClient *dns.Client, options ...Option[Client]) (*Client, error) {
 	client, err := util.CopyDNSClient(dnsClient)
 	if err != nil {
 		return nil, err
@@ -53,8 +55,10 @@ func NewClient(dnsClient *dns.Client, options ...func(*Client) error) (*Client, 
 		logger: logr.Discard(),
 	}
 
-	if err := c.setOption(options...); err != nil {
-		return nil, err
+	for _, option := range options {
+		if err := option(c); err != nil {
+			return nil, err
+		}
 	}
 
 	return c, nil
@@ -192,4 +196,67 @@ func (c *Client) DeleteContext(keyname string) error {
 	delete(c.ctx, keyname)
 
 	return nil
+}
+
+// Server maps the TKEY name to the context that negotiated it as
+// well as any other internal state.
+type Server struct {
+	m      sync.RWMutex
+	ctx    map[string]*wrapper.Acceptor
+	logger logr.Logger
+}
+
+// NewServer performs any library initialization necessary.
+// It returns a context handle for any further functions along with any error
+// that occurred.
+func NewServer(options ...Option[Server]) (*Server, error) {
+	s := &Server{
+		ctx:    make(map[string]*wrapper.Acceptor),
+		logger: logr.Discard(),
+	}
+
+	for _, option := range options {
+		if err := option(s); err != nil {
+			return nil, err
+		}
+	}
+
+	return s, nil
+}
+
+// Close deletes any active contexts and unloads any underlying libraries as
+// necessary.
+// It returns any error that occurred.
+func (s *Server) Close() error {
+	return s.close(true)
+}
+
+func (s *Server) newContext() (*wrapper.Acceptor, error) {
+	return wrapper.NewAcceptor(wrapper.WithLogger[wrapper.Acceptor](s.logger))
+}
+
+func (s *Server) update(ctx *wrapper.Acceptor, input []byte) (*wrapper.Acceptor, []byte, error) {
+	output, _, err := ctx.Accept(input)
+
+	return ctx, output, err
+}
+
+func (s *Server) generate(ctx *wrapper.Acceptor, msg []byte) ([]byte, error) {
+	return ctx.MakeSignature(msg)
+}
+
+func (s *Server) verify(ctx *wrapper.Acceptor, stripped, mac []byte) error {
+	return ctx.VerifySignature(stripped, mac)
+}
+
+func (s *Server) established(ctx *wrapper.Acceptor) (bool, error) {
+	return ctx.Established(), nil
+}
+
+func (s *Server) expired(ctx *wrapper.Acceptor) (bool, error) {
+	return ctx.Expiry().Before(time.Now()), nil
+}
+
+func (s *Server) delete(ctx *wrapper.Acceptor) error {
+	return ctx.Close()
 }

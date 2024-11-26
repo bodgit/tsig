@@ -29,3 +29,11 @@ func TestNewClientWithConfig(t *testing.T) {
 	_, err := gss.NewClient(new(dns.Client), gss.WithConfig(""))
 	assert.Nil(t, err)
 }
+
+func TestNewServer(t *testing.T) {
+	t.Parallel()
+
+	if err := testNewServer(t); err != nil {
+		t.Fatal(err)
+	}
+}

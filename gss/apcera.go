@@ -17,62 +17,8 @@ import (
 	"github.com/openshift/gssapi"
 )
 
-// Client maps the TKEY name to the context that negotiated it as
-// well as any other internal state.
-type Client struct {
-	m      sync.RWMutex
-	lib    *gssapi.Lib
-	client *dns.Client
-	ctx    map[string]*gssapi.CtxId
-	logger logr.Logger
-}
-
-// WithConfig sets the Kerberos configuration used.
-func WithConfig(_ string) func(*Client) error {
-	return func(c *Client) error {
-		return errNotSupported
-	}
-}
-
-// NewClient performs any library initialization necessary.
-// It returns a context handle for any further functions along with any error
-// that occurred.
-func NewClient(dnsClient *dns.Client, options ...func(*Client) error) (*Client, error) {
-	client, err := util.CopyDNSClient(dnsClient)
-	if err != nil {
-		return nil, err
-	}
-
-	client.TsigProvider = new(gssNoVerify)
-
-	lib, err := gssapi.Load(nil)
-	if err != nil {
-		return nil, err
-	}
-
-	c := &Client{
-		lib:    lib,
-		client: client,
-		ctx:    make(map[string]*gssapi.CtxId),
-		logger: logr.Discard(),
-	}
-
-	if err := c.setOption(options...); err != nil {
-		return nil, multierror.Append(err, c.lib.Unload())
-	}
-
-	return c, nil
-}
-
-// Close deletes any active contexts and unloads any underlying libraries as
-// necessary.
-// It returns any error that occurred.
-func (c *Client) Close() error {
-	return multierror.Append(c.close(), c.lib.Unload())
-}
-
-func (c *Client) generate(ctx *gssapi.CtxId, msg []byte) ([]byte, error) {
-	message, err := c.lib.MakeBufferBytes(msg)
+func generate(lib *gssapi.Lib, ctx *gssapi.CtxId, msg []byte) ([]byte, error) {
+	message, err := lib.MakeBufferBytes(msg)
 	if err != nil {
 		return nil, err
 	}
@@ -93,9 +39,8 @@ func (c *Client) generate(ctx *gssapi.CtxId, msg []byte) ([]byte, error) {
 	return token.Bytes(), nil
 }
 
-func (c *Client) verify(ctx *gssapi.CtxId, stripped, mac []byte) error {
-	// Turn the TSIG-stripped message bytes into a *gssapi.Buffer
-	message, err := c.lib.MakeBufferBytes(stripped)
+func verify(lib *gssapi.Lib, ctx *gssapi.CtxId, stripped, mac []byte) error {
+	message, err := lib.MakeBufferBytes(stripped)
 	if err != nil {
 		return err
 	}
@@ -104,8 +49,7 @@ func (c *Client) verify(ctx *gssapi.CtxId, stripped, mac []byte) error {
 		err = multierror.Append(err, message.Release()).ErrorOrNil()
 	}()
 
-	// Turn the TSIG MAC bytes into a *gssapi.Buffer
-	token, err := c.lib.MakeBufferBytes(mac)
+	token, err := lib.MakeBufferBytes(mac)
 	if err != nil {
 		return err
 	}
@@ -114,12 +58,73 @@ func (c *Client) verify(ctx *gssapi.CtxId, stripped, mac []byte) error {
 		err = multierror.Append(err, token.Release()).ErrorOrNil()
 	}()
 
-	// This is the actual verification bit
 	if _, err = ctx.VerifyMIC(message, token); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+// Client maps the TKEY name to the context that negotiated it as
+// well as any other internal state.
+type Client struct {
+	m      sync.RWMutex
+	lib    *gssapi.Lib
+	client *dns.Client
+	ctx    map[string]*gssapi.CtxId
+	logger logr.Logger
+}
+
+// WithConfig sets the Kerberos configuration used.
+func WithConfig[T Client](_ string) Option[T] {
+	return unsupportedOption[T]
+}
+
+// NewClient performs any library initialization necessary.
+// It returns a context handle for any further functions along with any error
+// that occurred.
+func NewClient(dnsClient *dns.Client, options ...Option[Client]) (*Client, error) {
+	client, err := util.CopyDNSClient(dnsClient)
+	if err != nil {
+		return nil, err
+	}
+
+	client.TsigProvider = new(gssNoVerify)
+
+	lib, err := gssapi.Load(nil)
+	if err != nil {
+		return nil, err
+	}
+
+	c := &Client{
+		lib:    lib,
+		client: client,
+		ctx:    make(map[string]*gssapi.CtxId),
+		logger: logr.Discard(),
+	}
+
+	for _, option := range options {
+		if err := option(c); err != nil {
+			return nil, multierror.Append(err, c.lib.Unload())
+		}
+	}
+
+	return c, nil
+}
+
+// Close deletes any active contexts and unloads any underlying libraries as
+// necessary.
+// It returns any error that occurred.
+func (c *Client) Close() error {
+	return multierror.Append(c.close(), c.lib.Unload())
+}
+
+func (c *Client) generate(ctx *gssapi.CtxId, msg []byte) ([]byte, error) {
+	return generate(c.lib, ctx, msg)
+}
+
+func (c *Client) verify(ctx *gssapi.CtxId, stripped, mac []byte) error {
+	return verify(c.lib, ctx, stripped, mac)
 }
 
 // NegotiateContext exchanges RFC 2930 TKEY records with the indicated DNS
@@ -257,4 +262,151 @@ func (c *Client) DeleteContext(keyname string) error {
 	delete(c.ctx, keyname)
 
 	return nil
+}
+
+// Server maps the TKEY name to the context that negotiated it as
+// well as any other internal state.
+type Server struct {
+	m      sync.RWMutex
+	lib    *gssapi.Lib
+	ctx    map[string]*gssapi.CtxId
+	logger logr.Logger
+}
+
+// NewServer performs any library initialization necessary.
+// It returns a context handle for any further functions along with any error
+// that occurred.
+func NewServer(options ...Option[Server]) (*Server, error) {
+	lib, err := gssapi.Load(nil)
+	if err != nil {
+		return nil, err
+	}
+
+	s := &Server{
+		lib:    lib,
+		ctx:    make(map[string]*gssapi.CtxId),
+		logger: logr.Discard(),
+	}
+
+	for _, option := range options {
+		if err := option(s); err != nil {
+			return nil, multierror.Append(err, s.lib.Unload())
+		}
+	}
+
+	return s, nil
+}
+
+// Close deletes any active contexts and unloads any underlying libraries as
+// necessary.
+// It returns any error that occurred.
+func (s *Server) Close() error {
+	return multierror.Append(s.close(true), s.lib.Unload()).ErrorOrNil()
+}
+
+func (s *Server) newContext() (*gssapi.CtxId, error) {
+	//nolint:nilnil
+	return nil, nil
+}
+
+//nolint:funlen
+func (s *Server) update(ctx *gssapi.CtxId, input []byte) (*gssapi.CtxId, []byte, error) {
+	/*var cred *gssapi.CredId
+
+	// equivalent of GSSAPIStrictAcceptorCheck
+	if s.strict { //nolint:nestif
+		hostname, err := osHostname()
+		if err != nil {
+			return nil, "", false, err
+		}
+
+		buffer, err := s.lib.MakeBufferString("host@" + hostname)
+		if err != nil {
+			return nil, "", false, err
+		}
+
+		defer func() {
+			err = multierror.Append(err, buffer.Release()).ErrorOrNil()
+		}()
+
+		service, err := buffer.Name(s.lib.GSS_C_NT_HOSTBASED_SERVICE)
+		if err != nil {
+			return nil, "", false, err
+		}
+
+		defer func() {
+			err = multierror.Append(err, service.Release()).ErrorOrNil()
+		}()
+
+		oids, err := s.lib.MakeOIDSet(s.lib.GSS_MECH_KRB5)
+		if err != nil {
+			return nil, "", false, err
+		}
+
+		defer func() {
+			err = multierror.Append(err, oids.Release()).ErrorOrNil()
+		}()
+
+		cred, _, _, err = s.lib.AcquireCred(service, gssapi.GSS_C_INDEFINITE, oids, gssapi.GSS_C_ACCEPT)
+		if err != nil {
+			return nil, "", false, err
+		}
+
+		defer func() {
+			err = multierror.Append(err, cred.Release()).ErrorOrNil()
+		}()
+	} else {*/
+	cred := s.lib.GSS_C_NO_CREDENTIAL
+	//}
+
+	token, err := s.lib.MakeBufferBytes(input)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	defer func() {
+		err = multierror.Append(err, token.Release()).ErrorOrNil()
+	}()
+
+	//nolint:dogsled
+	nctx, _, _, output, _, _, _, err := s.lib.AcceptSecContext(ctx, cred, token, s.lib.GSS_C_NO_CHANNEL_BINDINGS)
+	if err != nil && !s.lib.LastStatus.Major.ContinueNeeded() {
+		return nil, nil, err
+	}
+
+	defer func() {
+		err = multierror.Append(err, output.Release()).ErrorOrNil()
+	}()
+
+	return nctx, output.Bytes(), nil
+}
+
+func (s *Server) generate(ctx *gssapi.CtxId, msg []byte) ([]byte, error) {
+	return generate(s.lib, ctx, msg)
+}
+
+func (s *Server) verify(ctx *gssapi.CtxId, stripped, mac []byte) error {
+	return verify(s.lib, ctx, stripped, mac)
+}
+
+func (s *Server) established(ctx *gssapi.CtxId) (established bool, err error) {
+	if ctx != nil {
+		_, _, _, _, _, _, established, err = ctx.InquireContext()
+	}
+
+	return
+}
+
+func (s *Server) expired(ctx *gssapi.CtxId) (expired bool, err error) {
+	if ctx != nil {
+		var duration time.Duration
+		_, _, duration, _, _, _, _, err = ctx.InquireContext()
+		expired = duration <= 0
+	}
+
+	return
+}
+
+func (s *Server) delete(ctx *gssapi.CtxId) error {
+	return ctx.DeleteSecContext()
 }
