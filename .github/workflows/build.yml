@@ -33,10 +33,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: ${{ matrix.go }}
 
@@ -46,20 +46,20 @@ jobs:
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -yq libkrb5-dev krb5-user
 
       - name: golangci-lint (gokrb5)
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
         if: github.event_name == 'pull_request'
         with:
           only-new-issues: true
 
       - name: golangci-lint (apcera)
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
         if: github.event_name == 'pull_request'
         with:
           only-new-issues: true
           args: --build-tags apcera
 
       - name: golangci-lint (SSPI)
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
         if: github.event_name == 'pull_request'
         with:
           only-new-issues: true
