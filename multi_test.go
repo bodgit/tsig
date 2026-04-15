@@ -89,6 +89,7 @@ func TestMultiProviderGenerate(t *testing.T) {
 		table := table
 		t.Run(table.name, func(t *testing.T) {
 			t.Parallel()
+
 			b, err := table.provider.Generate(nil, nil)
 			assert.Equal(t, table.signature, b)
 			assert.Equal(t, table.err, err)
@@ -130,6 +131,7 @@ func TestMultiProviderVerify(t *testing.T) {
 		table := table
 		t.Run(table.name, func(t *testing.T) {
 			t.Parallel()
+
 			err := table.provider.Verify(nil, nil)
 			assert.Equal(t, table.err, err)
 		})

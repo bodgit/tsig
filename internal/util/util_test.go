@@ -153,10 +153,12 @@ func TestCopyDNSClient(t *testing.T) {
 		table := table
 		t.Run(table.name, func(t *testing.T) {
 			t.Parallel()
+
 			client, err := util.CopyDNSClient(&table.client)
 			if table.err == nil {
 				assert.Equal(t, table.net, client.Net)
 			}
+
 			assert.Equal(t, table.err, err)
 		})
 	}

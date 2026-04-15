@@ -178,6 +178,7 @@ func TestHMACGenerate(t *testing.T) {
 		table := table
 		t.Run(table.name, func(t *testing.T) {
 			t.Parallel()
+
 			b, err := table.provider.Generate(table.msg, table.tsig)
 			assert.Equal(t, table.b, b)
 			assert.Equal(t, table.err, err)
@@ -260,6 +261,7 @@ func TestHMACVerify(t *testing.T) {
 		table := table
 		t.Run(table.name, func(t *testing.T) {
 			t.Parallel()
+
 			err := table.provider.Verify(table.msg, table.tsig)
 			assert.Equal(t, table.err, err)
 		})
