@@ -1,6 +1,6 @@
 module github.com/bodgit/tsig
 
-go 1.18
+go 1.25
 
 require (
 	github.com/alexbrainman/sspi v0.0.0-20180613141037-e580b900e9f5
