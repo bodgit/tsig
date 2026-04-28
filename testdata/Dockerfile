@@ -1,4 +1,4 @@
-FROM rockylinux/rockylinux:9-ubi-init AS kdc
+FROM rockylinux/rockylinux:9-ubi-init@sha256:3f7cdc560114c454ab8347dd3ea9799a905546cc57980949688a2ec563156485 AS kdc
 
 EXPOSE 8088
 EXPOSE 8464
@@ -21,7 +21,7 @@ RUN kadmin.local ktadd -norandkey -k /etc/test.keytab test
 RUN kadmin.local addprinc -randkey DNS/ns.example.com
 RUN kadmin.local ktadd -k /etc/dns.keytab DNS/ns.example.com
 
-FROM rockylinux/rockylinux:9-ubi-init AS ns
+FROM rockylinux/rockylinux:9-ubi-init@sha256:3f7cdc560114c454ab8347dd3ea9799a905546cc57980949688a2ec563156485 AS ns
 
 EXPOSE 8053
 

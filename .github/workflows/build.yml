@@ -14,12 +14,6 @@ jobs:
   test:
     name: Build and Test
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        go:
-          - '1.21'
-          - '1.22'
 
     env:
       DNS_HOST: ns.example.com
@@ -38,7 +32,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go }}
+          go-version-file: 'go.mod'
 
       - name: Install Kerberos client
         run: |
@@ -46,20 +40,20 @@ jobs:
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -yq libkrb5-dev krb5-user
 
       - name: golangci-lint (gokrb5)
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
         if: github.event_name == 'pull_request'
         with:
           only-new-issues: true
 
       - name: golangci-lint (apcera)
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
         if: github.event_name == 'pull_request'
         with:
           only-new-issues: true
           args: --build-tags apcera
 
       - name: golangci-lint (SSPI)
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
         if: github.event_name == 'pull_request'
         with:
           only-new-issues: true
