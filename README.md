@@ -3,8 +3,7 @@
 [![Coverage Status](https://coveralls.io/repos/github/bodgit/tsig/badge.svg?branch=main)](https://coveralls.io/github/bodgit/tsig?branch=main)
 [![Go Report Card](https://goreportcard.com/badge/github.com/bodgit/tsig)](https://goreportcard.com/report/github.com/bodgit/tsig)
 [![GoDoc](https://godoc.org/github.com/bodgit/tsig?status.svg)](https://godoc.org/github.com/bodgit/tsig)
-![Go version](https://img.shields.io/badge/Go-1.22-brightgreen.svg)
-![Go version](https://img.shields.io/badge/Go-1.21-brightgreen.svg)
+![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/bodgit/tsig)
 
 # Additional TSIG methods
 
