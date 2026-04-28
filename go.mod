@@ -6,7 +6,7 @@ require (
 	github.com/alexbrainman/sspi v0.0.0-20250919150558-7d374ff0d59e
 	github.com/bodgit/gssapi v0.0.2
 	github.com/enceve/crypto v0.0.0-20160707101852-34d48bb93815
-	github.com/go-logr/logr v1.4.2
+	github.com/go-logr/logr v1.4.3
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/jcmturner/gokrb5/v8 v8.4.4
 	github.com/jinzhu/copier v0.4.0
