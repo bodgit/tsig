@@ -9,7 +9,6 @@ require (
 	github.com/go-logr/logr v1.4.3
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/jcmturner/gokrb5/v8 v8.4.4
-	github.com/jinzhu/copier v0.4.0
 	github.com/miekg/dns v1.1.72
 	github.com/openshift/gssapi v0.0.0-20161010215902-5fb4217df13b
 	github.com/stretchr/testify v1.11.1

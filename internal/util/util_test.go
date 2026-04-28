@@ -9,6 +9,7 @@ import (
 	"github.com/bodgit/tsig/internal/util"
 	"github.com/miekg/dns"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type FakeClient struct {
@@ -160,4 +161,44 @@ func TestCopyDNSClient(t *testing.T) {
 			assert.Equal(t, table.err, err)
 		})
 	}
+}
+
+type mockTsigProvider struct {
+	Name string
+}
+
+func (f mockTsigProvider) Generate(_ []byte, _ *dns.TSIG) ([]byte, error) {
+	return nil, nil
+}
+
+func (f mockTsigProvider) Verify(_ []byte, _ *dns.TSIG) error {
+	return nil
+}
+
+func TestCopyDNSClient_shallow_copy(t *testing.T) {
+	t.Parallel()
+
+	dnsClient := &dns.Client{
+		Net:          "udp",
+		TsigProvider: &mockTsigProvider{Name: "original"},
+	}
+
+	client, err := util.CopyDNSClient(dnsClient)
+	require.NoError(t, err)
+
+	client.TsigProvider = &mockTsigProvider{Name: "copy"}
+
+	originalProvider, ok := dnsClient.TsigProvider.(*mockTsigProvider)
+	require.True(t, ok)
+
+	assert.Equal(t, "original", originalProvider.Name)
+	assert.Equal(t, "udp", dnsClient.Net)
+	assert.Nil(t, dnsClient.TsigSecret)
+
+	copyProvider, ok := client.TsigProvider.(*mockTsigProvider)
+	require.True(t, ok)
+
+	assert.Equal(t, "copy", copyProvider.Name)
+	assert.Equal(t, "tcp", client.Net)
+	assert.NotNil(t, client.TsigSecret)
 }

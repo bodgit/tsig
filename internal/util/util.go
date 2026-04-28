@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/bodgit/tsig"
-	"github.com/jinzhu/copier"
 	"github.com/miekg/dns"
 )
 
@@ -37,10 +36,8 @@ type Exchanger interface {
 // TCP. If the existing network is configured to only use IPv4 or IPv6 then
 // the appropriate network is chosen to maintain this choice.
 func CopyDNSClient(dnsClient *dns.Client) (*dns.Client, error) {
-	client := new(dns.Client)
-	if err := copier.Copy(client, dnsClient); err != nil {
-		return nil, err
-	}
+	client := &dns.Client{}
+	*client = *dnsClient
 
 	switch client.Net {
 	case "tcp", "tcp4", "tcp6":
