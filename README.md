@@ -17,7 +17,15 @@ This is most useful for allowing
 for dealing with Windows DNS servers that require 'Secure only' updates or
 BIND if it has been configured to use Kerberos.
 
-> :warning: Windows DNS servers don't accept wildcard resource names in dynamic updates.
+## Notable users
+
+* [https://github.com/hashicorp/terraform-provider-dns](https://github.com/hashicorp/terraform-provider-dns)
+* [https://github.com/go-acme/lego](https://github.com/go-acme/lego)
+* [https://github.com/kubernetes-sigs/external-dns](https://github.com/kubernetes-sigs/external-dns)
+
+## Usage
+
+> :warning: Windows DNS servers don't accept wildcard resource names and only a subset of record types in dynamic updates.
 
 Here is an example client, it is necessary that your Kerberos or Active
 Directory environment is configured and functional:
