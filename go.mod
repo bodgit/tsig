@@ -3,7 +3,7 @@ module github.com/bodgit/tsig
 go 1.25
 
 require (
-	github.com/alexbrainman/sspi v0.0.0-20180613141037-e580b900e9f5
+	github.com/alexbrainman/sspi v0.0.0-20250919150558-7d374ff0d59e
 	github.com/bodgit/gssapi v0.0.2
 	github.com/enceve/crypto v0.0.0-20160707101852-34d48bb93815
 	github.com/go-logr/logr v1.4.2
