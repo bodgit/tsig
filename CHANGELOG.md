@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/bodgit/tsig/compare/v1.3.0...v1.3.1) (2026-05-20)
+
+
+### Bug Fixes
+
+* **deps:** update module github.com/bodgit/gssapi to v0.0.3 ([#179](https://github.com/bodgit/tsig/issues/179)) ([0823be3](https://github.com/bodgit/tsig/commit/0823be329768432679799b985f0e8a8254941278))
+
 ## [1.3.0](https://github.com/bodgit/tsig/compare/v1.2.2...v1.3.0) (2026-04-28)
 
 
