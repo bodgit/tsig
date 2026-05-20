@@ -3,8 +3,10 @@ package gss_test
 import (
 	"fmt"
 	"net"
+	"net/netip"
 	"os"
 	"runtime"
+	"strconv"
 	"testing"
 	"time"
 
@@ -95,7 +97,7 @@ func testExchange(t *testing.T) (err error) {
 	dnsClient := new(dns.Client)
 	dnsClient.Net = dnsClientTransport
 
-	gssClient, err := gss.NewClient(dnsClient, gss.WithLogger(testr.New(t)))
+	gssClient, err := gss.NewClient(dnsClient, gss.WithLogger[gss.Client](testr.New(t)))
 	if err != nil {
 		return err
 	}
@@ -180,7 +182,7 @@ func testExchangeKeytab(t *testing.T) (err error) {
 	dnsClient := new(dns.Client)
 	dnsClient.Net = dnsClientTransport
 
-	gssClient, err := gss.NewClient(dnsClient, gss.WithLogger(testr.New(t)))
+	gssClient, err := gss.NewClient(dnsClient, gss.WithLogger[gss.Client](testr.New(t)))
 	if err != nil {
 		return err
 	}
@@ -206,6 +208,101 @@ func TestExchange(t *testing.T) {
 func TestNewClientWithLogger(t *testing.T) {
 	t.Parallel()
 
-	_, err := gss.NewClient(new(dns.Client), gss.WithLogger(logr.Discard()))
+	_, err := gss.NewClient(new(dns.Client), gss.WithLogger[gss.Client](logr.Discard()))
 	assert.Nil(t, err)
+}
+
+func newServer(t *testing.T, hostname string) (string, func() error) {
+	t.Helper()
+
+	gssServer, err := gss.NewServer(gss.WithLogger[gss.Server](testr.New(t)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	server := &dns.Server{
+		Addr:         net.JoinHostPort(hostname, "0"),
+		Net:          "tcp4",
+		TsigProvider: gssServer,
+		Handler: dns.HandlerFunc(func(w dns.ResponseWriter, r *dns.Msg) {
+			switch r.Question[0].Qtype {
+			case dns.TypeTKEY:
+				gssServer.ServeDNS(w, r)
+			case dns.TypeA:
+				m := new(dns.Msg)
+				if rr := r.IsTsig(); rr != nil && w.TsigStatus() == nil {
+					m.SetReply(r)
+					m.SetTsig(rr.Header().Name, tsig.GSS, 300, time.Now().Unix())
+				} else {
+					m.SetRcode(r, dns.RcodeNotAuth)
+				}
+				_ = w.WriteMsg(m)
+			}
+		}),
+		MsgAcceptFunc: func(dh dns.Header) dns.MsgAcceptAction {
+			return dns.MsgAccept
+		},
+	}
+
+	//nolint:errcheck
+	go server.ListenAndServe()
+
+	for server.Listener == nil {
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	return strconv.FormatUint(uint64(netip.MustParseAddrPort(server.Listener.Addr().String()).Port()), 10), func() error {
+		return multierror.Append(server.Shutdown(), gssServer.Close()).ErrorOrNil()
+	}
+}
+
+func testNewServer(t *testing.T) (err error) {
+	t.Helper()
+
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	//nolint:dogsled
+	host, _, _, _, _, _ := testEnvironmentVariables(t)
+
+	port, teardown := newServer(t, host)
+
+	defer func() {
+		err = multierror.Append(err, teardown()).ErrorOrNil()
+	}()
+
+	dnsClient := new(dns.Client)
+	dnsClient.Net = dnsClientTransport
+
+	gssClient, err := gss.NewClient(dnsClient, gss.WithLogger[gss.Client](testr.New(t)))
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		err = multierror.Append(err, gssClient.Close()).ErrorOrNil()
+	}()
+
+	keyname, _, err := gssClient.NegotiateContext(net.JoinHostPort(host, port))
+	if err != nil {
+		return err
+	}
+
+	dnsClient.TsigProvider = gssClient
+
+	msg := new(dns.Msg)
+	msg.SetQuestion(dns.Fqdn("test.example.com"), dns.TypeA)
+	msg.SetTsig(keyname, tsig.GSS, 300, time.Now().Unix())
+
+	rr, _, err := dnsClient.Exchange(msg, net.JoinHostPort(host, port))
+	if err != nil {
+		return err
+	}
+
+	if rr.Rcode != dns.RcodeSuccess {
+		return fmt.Errorf("DNS error: %s (%d)", dns.RcodeToString[rr.Rcode], rr.Rcode)
+	}
+
+	return gssClient.DeleteContext(keyname)
 }
