@@ -87,7 +87,7 @@ linters:
     - tagalign
     - tagliatelle
     - testableexamples
-    #- testifylint
+    - testifylint
     - testpackage
     - thelper
     - tparallel

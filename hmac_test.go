@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-//nolint:funlen
+//nolint:funlen,goconst
 func TestHMACGenerate(t *testing.T) {
 	t.Parallel()
 

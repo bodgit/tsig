@@ -1,18 +1,18 @@
 package gss
 
 import (
-	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGenerateTKEYName(t *testing.T) {
 	t.Parallel()
 
 	tkey, err := generateTKEYName("host.example.com")
-	assert.Nil(t, err)
-	assert.Regexp(t, regexp.MustCompile(`^\d+\.sig-host\.example\.com\.$`), tkey)
+	require.NoError(t, err)
+	assert.Regexp(t, `^\d+\.sig-host\.example\.com\.$`, tkey)
 }
 
 func TestGenerateSPN(t *testing.T) {

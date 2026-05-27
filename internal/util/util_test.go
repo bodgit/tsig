@@ -98,7 +98,7 @@ func TestExchangeTKEY(t *testing.T) {
 	}
 }
 
-//nolint:funlen
+//nolint:funlen,goconst
 func TestCopyDNSClient(t *testing.T) {
 	t.Parallel()
 
