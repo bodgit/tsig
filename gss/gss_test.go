@@ -200,12 +200,12 @@ func testExchangeKeytab(t *testing.T) (err error) {
 func TestExchange(t *testing.T) {
 	t.Parallel()
 
-	assert.Nil(t, testExchange(t))
+	assert.NoError(t, testExchange(t))
 }
 
 func TestNewClientWithLogger(t *testing.T) {
 	t.Parallel()
 
 	_, err := gss.NewClient(new(dns.Client), gss.WithLogger(logr.Discard()))
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 }

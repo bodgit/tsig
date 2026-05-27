@@ -27,5 +27,5 @@ func TestNewClientWithConfig(t *testing.T) {
 	t.Parallel()
 
 	_, err := gss.NewClient(new(dns.Client), gss.WithConfig(""))
-	assert.NotNil(t, err)
+	assert.Error(t, err)
 }

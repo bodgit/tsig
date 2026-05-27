@@ -14,18 +14,18 @@ import (
 func TestExchangeCredentials(t *testing.T) {
 	t.Parallel()
 
-	assert.Nil(t, testExchangeCredentials(t))
+	assert.NoError(t, testExchangeCredentials(t))
 }
 
 func TestExchangeKeytab(t *testing.T) {
 	t.Parallel()
 
-	assert.Nil(t, testExchangeKeytab(t))
+	assert.NoError(t, testExchangeKeytab(t))
 }
 
 func TestNewClientWithConfig(t *testing.T) {
 	t.Parallel()
 
 	_, err := gss.NewClient(new(dns.Client), gss.WithConfig(""))
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 }
