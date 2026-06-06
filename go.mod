@@ -7,7 +7,6 @@ require (
 	github.com/bodgit/gssapi v0.0.3
 	github.com/enceve/crypto v0.0.0-20160707101852-34d48bb93815
 	github.com/go-logr/logr v1.4.3
-	github.com/hashicorp/go-multierror v1.1.1
 	github.com/jcmturner/gokrb5/v8 v8.4.4
 	github.com/miekg/dns v1.1.72
 	github.com/openshift/gssapi v0.0.0-20161010215902-5fb4217df13b
@@ -17,6 +16,7 @@ require (
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/hashicorp/errwrap v1.0.0 // indirect
+	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/go-uuid v1.0.3 // indirect
 	github.com/jcmturner/aescts/v2 v2.0.0 // indirect
 	github.com/jcmturner/dnsutils/v2 v2.0.0 // indirect

@@ -80,7 +80,6 @@ import (
 
 	"github.com/bodgit/tsig/internal/util"
 	"github.com/enceve/crypto/dh"
-	multierror "github.com/hashicorp/go-multierror"
 	"github.com/miekg/dns"
 )
 
@@ -154,12 +153,12 @@ func (c *Client) Close() error {
 
 	c.m.Unlock()
 
-	var errs *multierror.Error
+	var err error
 	for _, k := range keys {
-		errs = multierror.Append(errs, c.DeleteKey(k))
+		err = errors.Join(err, c.DeleteKey(k))
 	}
 
-	return errs.ErrorOrNil()
+	return err
 }
 
 func readDHKey(raw []byte) (*dhkey, error) {

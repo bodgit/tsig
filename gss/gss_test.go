@@ -1,6 +1,7 @@
 package gss_test
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -12,7 +13,6 @@ import (
 	"github.com/bodgit/tsig/gss"
 	"github.com/go-logr/logr"
 	"github.com/go-logr/logr/testr"
-	multierror "github.com/hashicorp/go-multierror"
 	"github.com/miekg/dns"
 	"github.com/stretchr/testify/assert"
 )
@@ -29,7 +29,7 @@ func testEnvironmentVariables(t *testing.T) (string, string, string, string, str
 		username string
 		password string
 		keytab   string
-		errs     *multierror.Error
+		err      error
 	)
 
 	for _, env := range []struct {
@@ -71,12 +71,12 @@ func testEnvironmentVariables(t *testing.T) (string, string, string, string, str
 		if v, ok := os.LookupEnv(env.name); ok {
 			*env.ptr = v
 		} else if !env.optional {
-			errs = multierror.Append(errs, fmt.Errorf("%s is not set", env.name))
+			err = errors.Join(err, fmt.Errorf("%s is not set", env.name))
 		}
 	}
 
-	if errs.ErrorOrNil() != nil {
-		t.Fatal(errs)
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	return host, port, realm, username, password, keytab
@@ -101,7 +101,7 @@ func testExchange(t *testing.T) (err error) {
 	}
 
 	defer func() {
-		err = multierror.Append(err, gssClient.Close()).ErrorOrNil()
+		err = errors.Join(err, gssClient.Close())
 	}()
 
 	keyname, _, err := gssClient.NegotiateContext(net.JoinHostPort(host, port))
@@ -153,7 +153,7 @@ func testExchangeCredentials(t *testing.T) (err error) {
 	}
 
 	defer func() {
-		err = multierror.Append(err, gssClient.Close()).ErrorOrNil()
+		err = errors.Join(err, gssClient.Close())
 	}()
 
 	if err = gssClient.SetLogger(testr.New(t)); err != nil {
@@ -186,7 +186,7 @@ func testExchangeKeytab(t *testing.T) (err error) {
 	}
 
 	defer func() {
-		err = multierror.Append(err, gssClient.Close()).ErrorOrNil()
+		err = errors.Join(err, gssClient.Close())
 	}()
 
 	keyname, _, err := gssClient.NegotiateContextWithKeytab(net.JoinHostPort(host, port), realm, username, keytab)

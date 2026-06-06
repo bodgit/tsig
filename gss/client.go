@@ -2,10 +2,10 @@ package gss
 
 import (
 	"encoding/hex"
+	"errors"
 
 	"github.com/bodgit/tsig"
 	"github.com/go-logr/logr"
-	multierror "github.com/hashicorp/go-multierror"
 	"github.com/miekg/dns"
 )
 
@@ -68,12 +68,12 @@ func (c *Client) close() error {
 
 	c.m.RUnlock()
 
-	var errs error
+	var err error
 	for _, k := range keys {
-		errs = multierror.Append(errs, c.DeleteContext(k))
+		err = errors.Join(err, c.DeleteContext(k))
 	}
 
-	return errs
+	return err
 }
 
 func (c *Client) setOption(options ...func(*Client) error) error {

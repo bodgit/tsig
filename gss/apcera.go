@@ -5,6 +5,7 @@ package gss
 
 import (
 	"encoding/hex"
+	"errors"
 	"net"
 	"sync"
 	"time"
@@ -12,7 +13,6 @@ import (
 	"github.com/bodgit/tsig"
 	"github.com/bodgit/tsig/internal/util"
 	"github.com/go-logr/logr"
-	multierror "github.com/hashicorp/go-multierror"
 	"github.com/miekg/dns"
 	"github.com/openshift/gssapi"
 )
@@ -58,7 +58,7 @@ func NewClient(dnsClient *dns.Client, options ...func(*Client) error) (*Client, 
 	}
 
 	if err := c.setOption(options...); err != nil {
-		return nil, multierror.Append(err, c.lib.Unload())
+		return nil, errors.Join(err, c.lib.Unload())
 	}
 
 	return c, nil
@@ -68,58 +68,58 @@ func NewClient(dnsClient *dns.Client, options ...func(*Client) error) (*Client, 
 // necessary.
 // It returns any error that occurred.
 func (c *Client) Close() error {
-	return multierror.Append(c.close(), c.lib.Unload())
+	return errors.Join(c.close(), c.lib.Unload())
 }
 
-func (c *Client) generate(ctx *gssapi.CtxId, msg []byte) ([]byte, error) {
+func (c *Client) generate(ctx *gssapi.CtxId, msg []byte) (b []byte, err error) {
 	message, err := c.lib.MakeBufferBytes(msg)
 	if err != nil {
-		return nil, err
+		return
 	}
 
 	defer func() {
-		err = multierror.Append(err, message.Release()).ErrorOrNil()
+		err = errors.Join(err, message.Release())
 	}()
 
 	token, err := ctx.GetMIC(gssapi.GSS_C_QOP_DEFAULT, message)
 	if err != nil {
-		return nil, err
+		return
 	}
 
 	defer func() {
-		err = multierror.Append(err, token.Release()).ErrorOrNil()
+		err = errors.Join(err, token.Release())
 	}()
 
-	return token.Bytes(), nil
+	b = token.Bytes()
+
+	return
 }
 
-func (c *Client) verify(ctx *gssapi.CtxId, stripped, mac []byte) error {
+func (c *Client) verify(ctx *gssapi.CtxId, stripped, mac []byte) (err error) {
 	// Turn the TSIG-stripped message bytes into a *gssapi.Buffer
 	message, err := c.lib.MakeBufferBytes(stripped)
 	if err != nil {
-		return err
+		return
 	}
 
 	defer func() {
-		err = multierror.Append(err, message.Release()).ErrorOrNil()
+		err = errors.Join(err, message.Release())
 	}()
 
 	// Turn the TSIG MAC bytes into a *gssapi.Buffer
 	token, err := c.lib.MakeBufferBytes(mac)
 	if err != nil {
-		return err
+		return
 	}
 
 	defer func() {
-		err = multierror.Append(err, token.Release()).ErrorOrNil()
+		err = errors.Join(err, token.Release())
 	}()
 
 	// This is the actual verification bit
-	if _, err = ctx.VerifyMIC(message, token); err != nil {
-		return err
-	}
+	_, err = ctx.VerifyMIC(message, token)
 
-	return nil
+	return
 }
 
 // NegotiateContext exchanges RFC 2930 TKEY records with the indicated DNS
@@ -131,30 +131,30 @@ func (c *Client) verify(ctx *gssapi.CtxId, stripped, mac []byte) error {
 func (c *Client) NegotiateContext(host string) (keyname string, expiry time.Time, err error) {
 	hostname, _, err := net.SplitHostPort(host)
 	if err != nil {
-		return "", time.Time{}, err
+		return
 	}
 
 	keyname, err = generateTKEYName(hostname)
 	if err != nil {
-		return "", time.Time{}, err
+		return
 	}
 
 	buffer, err := c.lib.MakeBufferString(generateSPN(hostname))
 	if err != nil {
-		return "", time.Time{}, err
+		return
 	}
 
 	defer func() {
-		err = multierror.Append(err, buffer.Release()).ErrorOrNil()
+		err = errors.Join(err, buffer.Release())
 	}()
 
 	service, err := buffer.Name(c.lib.GSS_KRB5_NT_PRINCIPAL_NAME)
 	if err != nil {
-		return "", time.Time{}, err
+		return
 	}
 
 	defer func() {
-		err = multierror.Append(err, service.Release()).ErrorOrNil()
+		err = errors.Join(err, service.Release())
 	}()
 
 	var (
@@ -176,12 +176,12 @@ func (c *Client) NegotiateContext(host string) (keyname string, expiry time.Time
 		ctx, expiry = nctx, time.Now().UTC().Add(duration)
 
 		defer func() {
-			err = multierror.Append(err, output.Release()).ErrorOrNil()
+			err = errors.Join(err, output.Release())
 		}()
 
 		if err != nil {
 			if !c.lib.LastStatus.Major.ContinueNeeded() {
-				return "", time.Time{}, err
+				return
 			}
 		} else {
 			// There is no further token to send
@@ -191,24 +191,32 @@ func (c *Client) NegotiateContext(host string) (keyname string, expiry time.Time
 		//nolint:lll
 		tkey, _, err := util.ExchangeTKEY(c.client, host, keyname, tsig.GSS, util.TkeyModeGSS, 3600, output.Bytes(), nil, "", "")
 		if err != nil {
-			return "", time.Time{}, multierror.Append(err, ctx.DeleteSecContext())
+			err = errors.Join(err, ctx.DeleteSecContext())
+
+			return
 		}
 
 		if tkey.Header().Name != keyname {
-			return "", time.Time{}, multierror.Append(errDoesNotMatch, ctx.DeleteSecContext())
+			err = errors.Join(errDoesNotMatch, ctx.DeleteSecContext())
+
+			return
 		}
 
 		key, err := hex.DecodeString(tkey.Key)
 		if err != nil {
-			return "", time.Time{}, multierror.Append(err, ctx.DeleteSecContext())
+			err = errors.Join(err, ctx.DeleteSecContext())
+
+			return
 		}
 
 		if input, err = c.lib.MakeBufferBytes(key); err != nil {
-			return "", time.Time{}, multierror.Append(err, ctx.DeleteSecContext())
+			err = errors.Join(err, ctx.DeleteSecContext())
+
+			return
 		}
 
 		defer func() {
-			err = multierror.Append(err, input.Release()).ErrorOrNil()
+			err = errors.Join(err, input.Release())
 		}()
 	}
 

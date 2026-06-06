@@ -5,6 +5,7 @@ package gss
 
 import (
 	"encoding/hex"
+	"errors"
 	"net"
 	"sync"
 	"time"
@@ -14,7 +15,6 @@ import (
 	"github.com/bodgit/tsig"
 	"github.com/bodgit/tsig/internal/util"
 	"github.com/go-logr/logr"
-	multierror "github.com/hashicorp/go-multierror"
 	"github.com/miekg/dns"
 )
 
@@ -75,21 +75,25 @@ func (c *Client) verify(ctx *negotiate.ClientContext, stripped, mac []byte) erro
 	return err
 }
 
-func (c *Client) negotiateContext(host string, creds *sspi.Credentials) (string, time.Time, error) {
+func (c *Client) negotiateContext(host string, creds *sspi.Credentials) (keyname string, expiry time.Time, err error) {
 	hostname, _, err := net.SplitHostPort(host)
 	if err != nil {
-		return "", time.Time{}, err
+		return
 	}
 
-	keyname, err := generateTKEYName(hostname)
+	keyname, err = generateTKEYName(hostname)
 	if err != nil {
-		return "", time.Time{}, err
+		return
 	}
 
 	ctx, output, err := negotiate.NewClientContext(creds, generateSPN(hostname))
 	if err != nil {
-		return "", time.Time{}, err
+		return
 	}
+
+	defer func() {
+		err = errors.Join(err, ctx.Release())
+	}()
 
 	var (
 		completed bool
@@ -99,20 +103,20 @@ func (c *Client) negotiateContext(host string, creds *sspi.Credentials) (string,
 	for ok := false; !ok; ok = completed {
 		//nolint:lll
 		if tkey, _, err = util.ExchangeTKEY(c.client, host, keyname, tsig.GSS, util.TkeyModeGSS, 3600, output, nil, "", ""); err != nil {
-			return "", time.Time{}, multierror.Append(err, ctx.Release())
+			return
 		}
 
 		if tkey.Header().Name != keyname {
-			return "", time.Time{}, multierror.Append(errDoesNotMatch, ctx.Release())
+			return
 		}
 
 		input, err := hex.DecodeString(tkey.Key)
 		if err != nil {
-			return "", time.Time{}, multierror.Append(err, ctx.Release())
+			return
 		}
 
 		if completed, output, err = ctx.Update(input); err != nil {
-			return "", time.Time{}, multierror.Append(err, ctx.Release())
+			return
 		}
 	}
 
@@ -120,8 +124,9 @@ func (c *Client) negotiateContext(host string, creds *sspi.Credentials) (string,
 	defer c.m.Unlock()
 
 	c.ctx[keyname] = ctx
+	expiry = ctx.Expiry()
 
-	return keyname, ctx.Expiry(), nil
+	return
 }
 
 // NegotiateContext exchanges RFC 2930 TKEY records with the indicated DNS
@@ -135,7 +140,7 @@ func (c *Client) NegotiateContext(host string) (keyname string, expiry time.Time
 	}
 
 	defer func() {
-		err = multierror.Append(err, creds.Release()).ErrorOrNil()
+		err = errors.Join(err, creds.Release())
 	}()
 
 	return c.negotiateContext(host, creds)
@@ -155,7 +160,7 @@ func (c *Client) NegotiateContextWithCredentials(host, domain, username, passwor
 	}
 
 	defer func() {
-		err = multierror.Append(err, creds.Release()).ErrorOrNil()
+		err = errors.Join(err, creds.Release())
 	}()
 
 	return c.negotiateContext(host, creds)
