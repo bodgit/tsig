@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/bodgit/tsig"
-	"github.com/miekg/dns"
+	dnsv1 "github.com/miekg/dns"
 )
 
 const (
@@ -29,14 +29,14 @@ const (
 
 // Exchanger is the interface a DNS client is expected to implement.
 type Exchanger interface {
-	Exchange(*dns.Msg, string) (*dns.Msg, time.Duration, error)
+	Exchange(*dnsv1.Msg, string) (*dnsv1.Msg, time.Duration, error)
 }
 
 // CopyDNSClient performs a deep copy of dnsClient, changing the network to
 // TCP. If the existing network is configured to only use IPv4 or IPv6 then
 // the appropriate network is chosen to maintain this choice.
-func CopyDNSClient(dnsClient *dns.Client) (*dns.Client, error) {
-	client := &dns.Client{}
+func CopyDNSClient(dnsClient *dnsv1.Client) (*dnsv1.Client, error) {
+	client := &dnsv1.Client{}
 	*client = *dnsClient
 
 	switch client.Net {
@@ -82,20 +82,20 @@ func calculateTimes(mode uint16, lifetime uint32) (uint32, uint32, error) {
 // response along with any error that occurred.
 //
 //nolint:cyclop,funlen
-func ExchangeTKEY(client Exchanger, host, keyname, algorithm string, mode uint16, lifetime uint32, input []byte, extra []dns.RR, tsigname, tsigalgo string) (*dns.TKEY, []dns.RR, error) { //nolint:lll
-	msg := &dns.Msg{
-		MsgHdr: dns.MsgHdr{
-			Id:               dns.Id(),
+func ExchangeTKEY(client Exchanger, host, keyname, algorithm string, mode uint16, lifetime uint32, input []byte, extra []dnsv1.RR, tsigname, tsigalgo string) (*dnsv1.TKEY, []dnsv1.RR, error) { //nolint:lll
+	msg := &dnsv1.Msg{
+		MsgHdr: dnsv1.MsgHdr{
+			Id:               dnsv1.Id(),
 			RecursionDesired: false,
 		},
-		Question: make([]dns.Question, 1),
-		Extra:    make([]dns.RR, 1+len(extra)),
+		Question: make([]dnsv1.Question, 1),
+		Extra:    make([]dnsv1.RR, 1+len(extra)),
 	}
 
-	msg.Question[0] = dns.Question{
+	msg.Question[0] = dnsv1.Question{
 		Name:   keyname,
-		Qtype:  dns.TypeTKEY,
-		Qclass: dns.ClassANY,
+		Qtype:  dnsv1.TypeTKEY,
+		Qclass: dnsv1.ClassANY,
 	}
 
 	inception, expiration, err := calculateTimes(mode, lifetime)
@@ -103,11 +103,11 @@ func ExchangeTKEY(client Exchanger, host, keyname, algorithm string, mode uint16
 		return nil, nil, err
 	}
 
-	msg.Extra[0] = &dns.TKEY{
-		Hdr: dns.RR_Header{
+	msg.Extra[0] = &dnsv1.TKEY{
+		Hdr: dnsv1.RR_Header{
 			Name:   keyname,
-			Rrtype: dns.TypeTKEY,
-			Class:  dns.ClassANY,
+			Rrtype: dnsv1.TypeTKEY,
+			Class:  dnsv1.ClassANY,
 			Ttl:    0,
 		},
 		Algorithm:  algorithm,
@@ -120,7 +120,7 @@ func ExchangeTKEY(client Exchanger, host, keyname, algorithm string, mode uint16
 
 	msg.Extra = append(msg.Extra, extra...)
 
-	if dns.CanonicalName(algorithm) != tsig.GSS && tsigname != "" && tsigalgo != "" {
+	if dnsv1.CanonicalName(algorithm) != tsig.GSS && tsigname != "" && tsigalgo != "" {
 		msg.SetTsig(tsigname, tsigalgo, 300, time.Now().Unix())
 	}
 
@@ -129,17 +129,17 @@ func ExchangeTKEY(client Exchanger, host, keyname, algorithm string, mode uint16
 		return nil, nil, err
 	}
 
-	if rr.Rcode != dns.RcodeSuccess {
-		return nil, nil, fmt.Errorf("DNS error: %s (%d)", dns.RcodeToString[rr.Rcode], rr.Rcode)
+	if rr.Rcode != dnsv1.RcodeSuccess {
+		return nil, nil, fmt.Errorf("DNS error: %s (%d)", dnsv1.RcodeToString[rr.Rcode], rr.Rcode)
 	}
 
-	additional := []dns.RR{}
+	additional := []dnsv1.RR{}
 
-	var tkey *dns.TKEY
+	var tkey *dnsv1.TKEY
 
 	for _, ans := range rr.Answer {
 		switch t := ans.(type) {
-		case *dns.TKEY:
+		case *dnsv1.TKEY:
 			// There mustn't be more than one TKEY answer RR
 			if tkey != nil {
 				return nil, nil, errors.New("multiple TKEY responses")
@@ -157,7 +157,7 @@ func ExchangeTKEY(client Exchanger, host, keyname, algorithm string, mode uint16
 	}
 
 	if tkey.Error != 0 {
-		return nil, nil, fmt.Errorf("TKEY error: %s (%d)", dns.RcodeToString[int(tkey.Error)], tkey.Error)
+		return nil, nil, fmt.Errorf("TKEY error: %s (%d)", dnsv1.RcodeToString[int(tkey.Error)], tkey.Error)
 	}
 
 	return tkey, additional, nil

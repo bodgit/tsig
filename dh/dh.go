@@ -81,7 +81,7 @@ import (
 	"github.com/bodgit/tsig/internal/util"
 	"github.com/enceve/crypto/dh"
 	multierror "github.com/hashicorp/go-multierror"
-	"github.com/miekg/dns"
+	dnsv1 "github.com/miekg/dns"
 )
 
 const (
@@ -106,7 +106,7 @@ type dhkey struct {
 // well as any other internal state.
 type Client struct {
 	m      sync.Mutex
-	client *dns.Client
+	client *dnsv1.Client
 	ctx    map[string]*context
 }
 
@@ -127,7 +127,7 @@ func dhGroup(group int) (*dh.Group, error) {
 // NewClient performs any library initialization necessary.
 // It returns a context handle for any further functions along with any error
 // that occurred.
-func NewClient(dnsClient *dns.Client) (*Client, error) {
+func NewClient(dnsClient *dnsv1.Client) (*Client, error) {
 	client, err := util.CopyDNSClient(dnsClient)
 	if err != nil {
 		return nil, err
@@ -269,18 +269,18 @@ func (c *Client) NegotiateKey(host, name, algorithm, mac string) (string, string
 		return "", "", time.Time{}, err
 	}
 
-	extra := make([]dns.RR, 1)
+	extra := make([]dnsv1.RR, 1)
 
-	extra[0] = &dns.DNSKEY{
-		Hdr: dns.RR_Header{
+	extra[0] = &dnsv1.DNSKEY{
+		Hdr: dnsv1.RR_Header{
 			Name:   keyname,
-			Rrtype: dns.TypeKEY,
-			Class:  dns.ClassANY,
+			Rrtype: dnsv1.TypeKEY,
+			Class:  dnsv1.ClassANY,
 			Ttl:    0,
 		},
 		Flags:     512, // FIXME
 		Protocol:  3,   // FIXME
-		Algorithm: dns.DH,
+		Algorithm: dnsv1.DH,
 		PublicKey: base64.StdEncoding.EncodeToString(akey),
 	}
 
@@ -288,7 +288,7 @@ func (c *Client) NegotiateKey(host, name, algorithm, mac string) (string, string
 	defer delete(c.client.TsigSecret, name)
 
 	//nolint:lll
-	tkey, keys, err := util.ExchangeTKEY(c.client, host, keyname, dns.HmacMD5, util.TkeyModeDH, 3600, an, extra, name, algorithm)
+	tkey, keys, err := util.ExchangeTKEY(c.client, host, keyname, dnsv1.HmacMD5, util.TkeyModeDH, 3600, an, extra, name, algorithm)
 	if err != nil {
 		return "", "", time.Time{}, err
 	}
@@ -296,8 +296,8 @@ func (c *Client) NegotiateKey(host, name, algorithm, mac string) (string, string
 	var bkey []byte
 
 	for _, k := range keys {
-		if key, ok := k.(*dns.KEY); ok {
-			if key.Header().Name != keyname && key.Algorithm == dns.DH {
+		if key, ok := k.(*dnsv1.KEY); ok {
+			if key.Header().Name != keyname && key.Algorithm == dnsv1.DH {
 				if bkey, err = base64.StdEncoding.DecodeString(key.PublicKey); err != nil {
 					return "", "", time.Time{}, err
 				}
@@ -338,7 +338,7 @@ func (c *Client) NegotiateKey(host, name, algorithm, mac string) (string, string
 
 	c.ctx[lower] = &context{
 		host:      host,
-		algorithm: dns.HmacMD5,
+		algorithm: dnsv1.HmacMD5,
 		mac:       key,
 	}
 

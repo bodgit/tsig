@@ -14,14 +14,14 @@ import (
 	"github.com/bodgit/tsig/internal/util"
 	"github.com/go-logr/logr"
 	"github.com/jcmturner/gokrb5/v8/gssapi"
-	"github.com/miekg/dns"
+	dnsv1 "github.com/miekg/dns"
 )
 
 // Client maps the TKEY name to the context that negotiated it as
 // well as any other internal state.
 type Client struct {
 	m      sync.RWMutex
-	client *dns.Client
+	client *dnsv1.Client
 	config string
 	ctx    map[string]*wrapper.Initiator
 	logger logr.Logger
@@ -39,7 +39,7 @@ func WithConfig(config string) func(*Client) error {
 // NewClient performs any library initialization necessary.
 // It returns a context handle for any further functions along with any error
 // that occurred.
-func NewClient(dnsClient *dns.Client, options ...func(*Client) error) (*Client, error) {
+func NewClient(dnsClient *dnsv1.Client, options ...func(*Client) error) (*Client, error) {
 	client, err := util.CopyDNSClient(dnsClient)
 	if err != nil {
 		return nil, err
@@ -102,7 +102,7 @@ func (c *Client) negotiateContext(host string, options []wrapper.Option[wrapper.
 		return "", time.Time{}, err
 	}
 
-	var tkey *dns.TKEY
+	var tkey *dnsv1.TKEY
 
 	for cont {
 		// We don't care about non-TKEY answers, no additional RR's to send, and no signing

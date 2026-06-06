@@ -10,12 +10,12 @@ import (
 	"encoding/hex"
 	"hash"
 
-	"github.com/miekg/dns"
+	dnsv1 "github.com/miekg/dns"
 )
 
-// HMAC implements the standard HMAC TSIG methods using the dns.TsigProvider
+// HMAC implements the standard HMAC TSIG methods using the [dnsv1.TsigProvider]
 // interface. It holds a map of TSIG key names to base64-encoded secrets. The
-// key names should be in canonical form, see dns.CanonicalName.
+// key names should be in canonical form, see [dnsv1.CanonicalName].
 type HMAC map[string]string
 
 func fromBase64(s []byte) (buf []byte, err error) {
@@ -30,29 +30,29 @@ func fromBase64(s []byte) (buf []byte, err error) {
 // Generate generates the TSIG MAC using the HMAC algorithm indicated by
 // t.Algorithm using h[t.Hdr.Name] as the key.
 // It returns the bytes for the TSIG MAC and any error that occurred.
-func (h HMAC) Generate(msg []byte, t *dns.TSIG) ([]byte, error) {
+func (h HMAC) Generate(msg []byte, t *dnsv1.TSIG) ([]byte, error) {
 	var f func() hash.Hash
 
-	switch dns.CanonicalName(t.Algorithm) {
-	case dns.HmacMD5:
+	switch dnsv1.CanonicalName(t.Algorithm) {
+	case dnsv1.HmacMD5:
 		f = md5.New
-	case dns.HmacSHA1:
+	case dnsv1.HmacSHA1:
 		f = sha1.New
-	case dns.HmacSHA224:
+	case dnsv1.HmacSHA224:
 		f = sha256.New224
-	case dns.HmacSHA256:
+	case dnsv1.HmacSHA256:
 		f = sha256.New
-	case dns.HmacSHA384:
+	case dnsv1.HmacSHA384:
 		f = sha512.New384
-	case dns.HmacSHA512:
+	case dnsv1.HmacSHA512:
 		f = sha512.New
 	default:
-		return nil, dns.ErrKeyAlg
+		return nil, dnsv1.ErrKeyAlg
 	}
 
 	secret, ok := h[t.Hdr.Name]
 	if !ok {
-		return nil, dns.ErrSecret
+		return nil, dnsv1.ErrSecret
 	}
 
 	rawsecret, err := fromBase64([]byte(secret))
@@ -69,7 +69,7 @@ func (h HMAC) Generate(msg []byte, t *dns.TSIG) ([]byte, error) {
 // Verify verifies the TSIG MAC using the HMAC algorithm indicated by
 // t.Algorithm using h[t.Hdr.Name] as the key.
 // It returns any error that occurred.
-func (h HMAC) Verify(msg []byte, t *dns.TSIG) error {
+func (h HMAC) Verify(msg []byte, t *dnsv1.TSIG) error {
 	b, err := h.Generate(msg, t)
 	if err != nil {
 		return err
@@ -81,7 +81,7 @@ func (h HMAC) Verify(msg []byte, t *dns.TSIG) error {
 	}
 
 	if !hmac.Equal(b, mac) {
-		return dns.ErrSig
+		return dnsv1.ErrSig
 	}
 
 	return nil

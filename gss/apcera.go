@@ -13,7 +13,7 @@ import (
 	"github.com/bodgit/tsig/internal/util"
 	"github.com/go-logr/logr"
 	multierror "github.com/hashicorp/go-multierror"
-	"github.com/miekg/dns"
+	dnsv1 "github.com/miekg/dns"
 	"github.com/openshift/gssapi"
 )
 
@@ -22,7 +22,7 @@ import (
 type Client struct {
 	m      sync.RWMutex
 	lib    *gssapi.Lib
-	client *dns.Client
+	client *dnsv1.Client
 	ctx    map[string]*gssapi.CtxId
 	logger logr.Logger
 }
@@ -37,7 +37,7 @@ func WithConfig(_ string) func(*Client) error {
 // NewClient performs any library initialization necessary.
 // It returns a context handle for any further functions along with any error
 // that occurred.
-func NewClient(dnsClient *dns.Client, options ...func(*Client) error) (*Client, error) {
+func NewClient(dnsClient *dnsv1.Client, options ...func(*Client) error) (*Client, error) {
 	client, err := util.CopyDNSClient(dnsClient)
 	if err != nil {
 		return nil, err

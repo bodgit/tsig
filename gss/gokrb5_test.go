@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/bodgit/tsig/gss"
-	"github.com/miekg/dns"
+	dnsv1 "github.com/miekg/dns"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -26,6 +26,6 @@ func TestExchangeKeytab(t *testing.T) {
 func TestNewClientWithConfig(t *testing.T) {
 	t.Parallel()
 
-	_, err := gss.NewClient(new(dns.Client), gss.WithConfig(""))
+	_, err := gss.NewClient(new(dnsv1.Client), gss.WithConfig(""))
 	assert.NoError(t, err)
 }

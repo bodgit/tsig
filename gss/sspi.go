@@ -15,14 +15,14 @@ import (
 	"github.com/bodgit/tsig/internal/util"
 	"github.com/go-logr/logr"
 	multierror "github.com/hashicorp/go-multierror"
-	"github.com/miekg/dns"
+	dnsv1 "github.com/miekg/dns"
 )
 
 // Client maps the TKEY name to the context that negotiated it as
 // well as any other internal state.
 type Client struct {
 	m      sync.RWMutex
-	client *dns.Client
+	client *dnsv1.Client
 	ctx    map[string]*negotiate.ClientContext
 	logger logr.Logger
 }
@@ -37,7 +37,7 @@ func WithConfig(_ string) func(*Client) error {
 // NewClient performs any library initialization necessary.
 // It returns a context handle for any further functions along with any error
 // that occurred.
-func NewClient(dnsClient *dns.Client, options ...func(*Client) error) (*Client, error) {
+func NewClient(dnsClient *dnsv1.Client, options ...func(*Client) error) (*Client, error) {
 	client, err := util.CopyDNSClient(dnsClient)
 	if err != nil {
 		return nil, err
@@ -93,7 +93,7 @@ func (c *Client) negotiateContext(host string, creds *sspi.Credentials) (string,
 
 	var (
 		completed bool
-		tkey      *dns.TKEY
+		tkey      *dnsv1.TKEY
 	)
 
 	for ok := false; !ok; ok = completed {

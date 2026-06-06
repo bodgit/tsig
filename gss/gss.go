@@ -78,7 +78,7 @@ import (
 	"math/big"
 
 	"github.com/bodgit/tsig"
-	"github.com/miekg/dns"
+	dnsv1 "github.com/miekg/dns"
 )
 
 var (
@@ -87,7 +87,7 @@ var (
 	errNoSuchContext = errors.New("no such context")
 )
 
-// gssNoVerify is a dns.TsigProvider that skips any GSS-TSIG verification.
+// gssNoVerify is a [dnsv1.TsigProvider] that skips any GSS-TSIG verification.
 //
 // BIND doesn't sign TKEY responses but Windows does, using the key you're
 // currently negotiating so it creates a chicken & egg problem. According
@@ -95,17 +95,17 @@ var (
 // cryptographically secure anyway.
 type gssNoVerify struct{}
 
-func (*gssNoVerify) Generate(_ []byte, t *dns.TSIG) ([]byte, error) {
-	if dns.CanonicalName(t.Algorithm) != tsig.GSS {
-		return nil, dns.ErrKeyAlg
+func (*gssNoVerify) Generate(_ []byte, t *dnsv1.TSIG) ([]byte, error) {
+	if dnsv1.CanonicalName(t.Algorithm) != tsig.GSS {
+		return nil, dnsv1.ErrKeyAlg
 	}
 
-	return nil, dns.ErrSecret
+	return nil, dnsv1.ErrSecret
 }
 
-func (*gssNoVerify) Verify(_ []byte, t *dns.TSIG) error {
-	if dns.CanonicalName(t.Algorithm) != tsig.GSS {
-		return dns.ErrKeyAlg
+func (*gssNoVerify) Verify(_ []byte, t *dnsv1.TSIG) error {
+	if dnsv1.CanonicalName(t.Algorithm) != tsig.GSS {
+		return dnsv1.ErrKeyAlg
 	}
 
 	return nil
@@ -117,11 +117,11 @@ func generateTKEYName(host string) (string, error) {
 		return "", err
 	}
 
-	return dns.Fqdn(fmt.Sprintf("%d.sig-%s", i.Int64(), host)), nil
+	return dnsv1.Fqdn(fmt.Sprintf("%d.sig-%s", i.Int64(), host)), nil
 }
 
 func generateSPN(host string) string {
-	if dns.IsFqdn(host) {
+	if dnsv1.IsFqdn(host) {
 		return fmt.Sprintf("DNS/%s", host[:len(host)-1])
 	}
 

@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/bodgit/tsig"
-	"github.com/miekg/dns"
+	dnsv1 "github.com/miekg/dns"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -16,31 +16,31 @@ var (
 
 type unsupportedProvider struct{}
 
-func (unsupportedProvider) Generate(_ []byte, _ *dns.TSIG) ([]byte, error) {
-	return nil, dns.ErrKeyAlg
+func (unsupportedProvider) Generate(_ []byte, _ *dnsv1.TSIG) ([]byte, error) {
+	return nil, dnsv1.ErrKeyAlg
 }
 
-func (unsupportedProvider) Verify(_ []byte, _ *dns.TSIG) error {
-	return dns.ErrKeyAlg
+func (unsupportedProvider) Verify(_ []byte, _ *dnsv1.TSIG) error {
+	return dnsv1.ErrKeyAlg
 }
 
 type errorProvider struct{}
 
-func (errorProvider) Generate(_ []byte, _ *dns.TSIG) ([]byte, error) {
+func (errorProvider) Generate(_ []byte, _ *dnsv1.TSIG) ([]byte, error) {
 	return nil, errProvider
 }
 
-func (errorProvider) Verify(_ []byte, _ *dns.TSIG) error {
+func (errorProvider) Verify(_ []byte, _ *dnsv1.TSIG) error {
 	return errProvider
 }
 
 type testProvider struct{}
 
-func (testProvider) Generate(_ []byte, _ *dns.TSIG) ([]byte, error) {
+func (testProvider) Generate(_ []byte, _ *dnsv1.TSIG) ([]byte, error) {
 	return testSignature, nil
 }
 
-func (testProvider) Verify(_ []byte, _ *dns.TSIG) error {
+func (testProvider) Verify(_ []byte, _ *dnsv1.TSIG) error {
 	return nil
 }
 
@@ -49,7 +49,7 @@ func TestMultiProviderGenerate(t *testing.T) {
 
 	tables := []struct {
 		name      string
-		provider  dns.TsigProvider
+		provider  dnsv1.TsigProvider
 		signature []byte
 		err       error
 	}{
@@ -75,7 +75,7 @@ func TestMultiProviderGenerate(t *testing.T) {
 			"all unsupported",
 			tsig.MultiProvider(new(unsupportedProvider)),
 			nil,
-			dns.ErrKeyAlg,
+			dnsv1.ErrKeyAlg,
 		},
 		{
 			"nested",
@@ -101,7 +101,7 @@ func TestMultiProviderVerify(t *testing.T) {
 
 	tables := []struct {
 		name     string
-		provider dns.TsigProvider
+		provider dnsv1.TsigProvider
 		err      error
 	}{
 		{
@@ -122,7 +122,7 @@ func TestMultiProviderVerify(t *testing.T) {
 		{
 			"all unsuppored",
 			tsig.MultiProvider(new(unsupportedProvider)),
-			dns.ErrKeyAlg,
+			dnsv1.ErrKeyAlg,
 		},
 	}
 

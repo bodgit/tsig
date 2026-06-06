@@ -13,7 +13,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/go-logr/logr/testr"
 	multierror "github.com/hashicorp/go-multierror"
-	"github.com/miekg/dns"
+	dnsv1 "github.com/miekg/dns"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -92,7 +92,7 @@ func testExchange(t *testing.T) (err error) {
 	//nolint:dogsled
 	host, port, _, _, _, _ := testEnvironmentVariables(t)
 
-	dnsClient := new(dns.Client)
+	dnsClient := new(dnsv1.Client)
 	dnsClient.Net = dnsClientTransport
 
 	gssClient, err := gss.NewClient(dnsClient, gss.WithLogger(testr.New(t)))
@@ -111,15 +111,15 @@ func testExchange(t *testing.T) (err error) {
 
 	dnsClient.TsigProvider = gssClient
 
-	msg := new(dns.Msg)
-	msg.SetUpdate(dns.Fqdn("example.com"))
+	msg := new(dnsv1.Msg)
+	msg.SetUpdate(dnsv1.Fqdn("example.com"))
 
-	insert, err := dns.NewRR("test.example.com. 300 A 192.0.2.1")
+	insert, err := dnsv1.NewRR("test.example.com. 300 A 192.0.2.1")
 	if err != nil {
 		return err
 	}
 
-	msg.Insert([]dns.RR{insert})
+	msg.Insert([]dnsv1.RR{insert})
 
 	msg.SetTsig(keyname, tsig.GSS, 300, time.Now().Unix())
 
@@ -128,8 +128,8 @@ func testExchange(t *testing.T) (err error) {
 		return err
 	}
 
-	if rr.Rcode != dns.RcodeSuccess {
-		return fmt.Errorf("DNS error: %s (%d)", dns.RcodeToString[rr.Rcode], rr.Rcode)
+	if rr.Rcode != dnsv1.RcodeSuccess {
+		return fmt.Errorf("DNS error: %s (%d)", dnsv1.RcodeToString[rr.Rcode], rr.Rcode)
 	}
 
 	return gssClient.DeleteContext(keyname)
@@ -144,7 +144,7 @@ func testExchangeCredentials(t *testing.T) (err error) {
 
 	host, port, realm, username, password, _ := testEnvironmentVariables(t)
 
-	dnsClient := new(dns.Client)
+	dnsClient := new(dnsv1.Client)
 	dnsClient.Net = dnsClientTransport
 
 	gssClient, err := gss.NewClient(dnsClient)
@@ -177,7 +177,7 @@ func testExchangeKeytab(t *testing.T) (err error) {
 
 	host, port, realm, username, _, keytab := testEnvironmentVariables(t)
 
-	dnsClient := new(dns.Client)
+	dnsClient := new(dnsv1.Client)
 	dnsClient.Net = dnsClientTransport
 
 	gssClient, err := gss.NewClient(dnsClient, gss.WithLogger(testr.New(t)))
@@ -206,6 +206,6 @@ func TestExchange(t *testing.T) {
 func TestNewClientWithLogger(t *testing.T) {
 	t.Parallel()
 
-	_, err := gss.NewClient(new(dns.Client), gss.WithLogger(logr.Discard()))
+	_, err := gss.NewClient(new(dnsv1.Client), gss.WithLogger(logr.Discard()))
 	assert.NoError(t, err)
 }

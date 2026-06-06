@@ -7,18 +7,18 @@ import (
 
 	"github.com/bodgit/tsig"
 	"github.com/bodgit/tsig/internal/util"
-	"github.com/miekg/dns"
+	dnsv1 "github.com/miekg/dns"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 type FakeClient struct {
-	Msg      *dns.Msg
+	Msg      *dnsv1.Msg
 	Duration time.Duration
 	Err      error
 }
 
-func (c *FakeClient) Exchange(_ *dns.Msg, _ string) (*dns.Msg, time.Duration, error) {
+func (c *FakeClient) Exchange(_ *dnsv1.Msg, _ string) (*dnsv1.Msg, time.Duration, error) {
 	if c.Err != nil {
 		return nil, 0, c.Err
 	}
@@ -32,11 +32,11 @@ func TestExchangeTKEY(t *testing.T) {
 
 	now := uint32(time.Now().Unix())
 
-	goodTKEY := &dns.TKEY{
-		Hdr: dns.RR_Header{
+	goodTKEY := &dnsv1.TKEY{
+		Hdr: dnsv1.RR_Header{
 			Name:   "test.example.com.",
-			Rrtype: dns.TypeTKEY,
-			Class:  dns.ClassANY,
+			Rrtype: dnsv1.TypeTKEY,
+			Class:  dnsv1.ClassANY,
 			Ttl:    0,
 		},
 		Algorithm:  tsig.GSS,
@@ -56,18 +56,18 @@ func TestExchangeTKEY(t *testing.T) {
 		mode               uint16
 		lifetime           uint32
 		input              []byte
-		extra              []dns.RR
+		extra              []dnsv1.RR
 		tsigname           string
 		tsigalgo           string
-		expectedTKEY       *dns.TKEY
-		expectedAdditional []dns.RR
+		expectedTKEY       *dnsv1.TKEY
+		expectedAdditional []dnsv1.RR
 		expectedErr        error
 	}{
 		{
 			name: "ok",
 			client: FakeClient{
-				Msg: &dns.Msg{
-					Answer: []dns.RR{
+				Msg: &dnsv1.Msg{
+					Answer: []dnsv1.RR{
 						goodTKEY,
 					},
 				},
@@ -80,7 +80,7 @@ func TestExchangeTKEY(t *testing.T) {
 			mode:               util.TkeyModeGSS,
 			lifetime:           3600,
 			expectedTKEY:       goodTKEY,
-			expectedAdditional: []dns.RR{},
+			expectedAdditional: []dnsv1.RR{},
 			expectedErr:        nil,
 		},
 	}
@@ -104,13 +104,13 @@ func TestCopyDNSClient(t *testing.T) {
 
 	tables := []struct {
 		name   string
-		client dns.Client
+		client dnsv1.Client
 		net    string
 		err    error
 	}{
 		{
 			"tcp",
-			dns.Client{
+			dnsv1.Client{
 				Net: "tcp",
 			},
 			"tcp",
@@ -118,7 +118,7 @@ func TestCopyDNSClient(t *testing.T) {
 		},
 		{
 			"udp",
-			dns.Client{
+			dnsv1.Client{
 				Net: "udp",
 			},
 			"tcp",
@@ -126,7 +126,7 @@ func TestCopyDNSClient(t *testing.T) {
 		},
 		{
 			"udp4",
-			dns.Client{
+			dnsv1.Client{
 				Net: "udp4",
 			},
 			"tcp4",
@@ -134,7 +134,7 @@ func TestCopyDNSClient(t *testing.T) {
 		},
 		{
 			"udp6",
-			dns.Client{
+			dnsv1.Client{
 				Net: "udp6",
 			},
 			"tcp6",
@@ -142,7 +142,7 @@ func TestCopyDNSClient(t *testing.T) {
 		},
 		{
 			"invalid",
-			dns.Client{
+			dnsv1.Client{
 				Net: "invalid",
 			},
 			"tcp6",
@@ -167,18 +167,18 @@ type mockTsigProvider struct {
 	Name string
 }
 
-func (f mockTsigProvider) Generate(_ []byte, _ *dns.TSIG) ([]byte, error) {
+func (f mockTsigProvider) Generate(_ []byte, _ *dnsv1.TSIG) ([]byte, error) {
 	return nil, nil
 }
 
-func (f mockTsigProvider) Verify(_ []byte, _ *dns.TSIG) error {
+func (f mockTsigProvider) Verify(_ []byte, _ *dnsv1.TSIG) error {
 	return nil
 }
 
 func TestCopyDNSClient_shallow_copy(t *testing.T) {
 	t.Parallel()
 
-	dnsClient := &dns.Client{
+	dnsClient := &dnsv1.Client{
 		Net:          "udp",
 		TsigProvider: &mockTsigProvider{Name: "original"},
 	}

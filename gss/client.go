@@ -6,19 +6,19 @@ import (
 	"github.com/bodgit/tsig"
 	"github.com/go-logr/logr"
 	multierror "github.com/hashicorp/go-multierror"
-	"github.com/miekg/dns"
+	dnsv1 "github.com/miekg/dns"
 )
 
-var _ dns.TsigProvider = new(Client)
+var _ dnsv1.TsigProvider = new(Client)
 
 // Generate generates the TSIG MAC based on the established context.
 // It is called with the bytes of the DNS message, and the partial TSIG
 // record containing the algorithm and name which is the negotiated TKEY
 // for this context.
 // It returns the bytes for the TSIG MAC and any error that occurred.
-func (c *Client) Generate(msg []byte, t *dns.TSIG) ([]byte, error) {
-	if dns.CanonicalName(t.Algorithm) != tsig.GSS {
-		return nil, dns.ErrKeyAlg
+func (c *Client) Generate(msg []byte, t *dnsv1.TSIG) ([]byte, error) {
+	if dnsv1.CanonicalName(t.Algorithm) != tsig.GSS {
+		return nil, dnsv1.ErrKeyAlg
 	}
 
 	c.m.RLock()
@@ -26,7 +26,7 @@ func (c *Client) Generate(msg []byte, t *dns.TSIG) ([]byte, error) {
 
 	ctx, ok := c.ctx[t.Hdr.Name]
 	if !ok {
-		return nil, dns.ErrSecret
+		return nil, dnsv1.ErrSecret
 	}
 
 	return c.generate(ctx, msg)
@@ -37,9 +37,9 @@ func (c *Client) Generate(msg []byte, t *dns.TSIG) ([]byte, error) {
 // containing the algorithm, MAC, and name which is the negotiated TKEY
 // for this context.
 // It returns any error that occurred.
-func (c *Client) Verify(stripped []byte, t *dns.TSIG) error {
-	if dns.CanonicalName(t.Algorithm) != tsig.GSS {
-		return dns.ErrKeyAlg
+func (c *Client) Verify(stripped []byte, t *dnsv1.TSIG) error {
+	if dnsv1.CanonicalName(t.Algorithm) != tsig.GSS {
+		return dnsv1.ErrKeyAlg
 	}
 
 	c.m.RLock()
@@ -47,7 +47,7 @@ func (c *Client) Verify(stripped []byte, t *dns.TSIG) error {
 
 	ctx, ok := c.ctx[t.Hdr.Name]
 	if !ok {
-		return dns.ErrSecret
+		return dnsv1.ErrSecret
 	}
 
 	mac, err := hex.DecodeString(t.MAC)

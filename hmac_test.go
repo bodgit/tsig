@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/bodgit/tsig"
-	"github.com/miekg/dns"
+	dnsv1 "github.com/miekg/dns"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -18,7 +18,7 @@ func TestHMACGenerate(t *testing.T) {
 		name     string
 		provider tsig.HMAC
 		msg      []byte
-		tsig     *dns.TSIG
+		tsig     *dnsv1.TSIG
 		b        []byte
 		err      error
 	}{
@@ -26,11 +26,11 @@ func TestHMACGenerate(t *testing.T) {
 			"md5",
 			tsig.HMAC{"example.": "DRwIYZn6exnhof/mcV/aEQ=="},
 			[]byte("message"),
-			&dns.TSIG{
-				Hdr: dns.RR_Header{
+			&dnsv1.TSIG{
+				Hdr: dnsv1.RR_Header{
 					Name: "example.",
 				},
-				Algorithm: dns.HmacMD5,
+				Algorithm: dnsv1.HmacMD5,
 			},
 			[]byte{
 				0x0b, 0x78, 0x2f, 0xf6, 0xac, 0xb3, 0xf6, 0xbe,
@@ -42,11 +42,11 @@ func TestHMACGenerate(t *testing.T) {
 			"sha1",
 			tsig.HMAC{"example.": "dZFRPtLqbQXGs7SdraTJJSGNSCU="},
 			[]byte("message"),
-			&dns.TSIG{
-				Hdr: dns.RR_Header{
+			&dnsv1.TSIG{
+				Hdr: dnsv1.RR_Header{
 					Name: "example.",
 				},
-				Algorithm: dns.HmacSHA1,
+				Algorithm: dnsv1.HmacSHA1,
 			},
 			[]byte{
 				0xb8, 0xb5, 0xdf, 0xd4, 0x27, 0x85, 0x07, 0x6f,
@@ -59,11 +59,11 @@ func TestHMACGenerate(t *testing.T) {
 			"sha224",
 			tsig.HMAC{"example.": "NaDGqfyc2/Fc0muCPB78CyGPlveTursOxrPVVQ=="},
 			[]byte("message"),
-			&dns.TSIG{
-				Hdr: dns.RR_Header{
+			&dnsv1.TSIG{
+				Hdr: dnsv1.RR_Header{
 					Name: "example.",
 				},
-				Algorithm: dns.HmacSHA224,
+				Algorithm: dnsv1.HmacSHA224,
 			},
 			[]byte{
 				0xfc, 0x1c, 0xf5, 0xd9, 0x5e, 0x1f, 0xb0, 0xd5,
@@ -77,11 +77,11 @@ func TestHMACGenerate(t *testing.T) {
 			"sha256",
 			tsig.HMAC{"example.": "BduxMlVUsrEhdgfOLKSLhNE4D3qzDx7dwyRjt7+BDNE="},
 			[]byte("message"),
-			&dns.TSIG{
-				Hdr: dns.RR_Header{
+			&dnsv1.TSIG{
+				Hdr: dnsv1.RR_Header{
 					Name: "example.",
 				},
-				Algorithm: dns.HmacSHA256,
+				Algorithm: dnsv1.HmacSHA256,
 			},
 			[]byte{
 				0xdc, 0x76, 0x07, 0x57, 0xa5, 0x92, 0x01, 0x55,
@@ -95,11 +95,11 @@ func TestHMACGenerate(t *testing.T) {
 			"sha384",
 			tsig.HMAC{"example.": "xqbc2K8kfLDw3yNOOw9kloxrLPX0ILoGK4sxZwVOgDnGzcp9DZu5nDQMZBofAIYf"},
 			[]byte("message"),
-			&dns.TSIG{
-				Hdr: dns.RR_Header{
+			&dnsv1.TSIG{
+				Hdr: dnsv1.RR_Header{
 					Name: "example.",
 				},
-				Algorithm: dns.HmacSHA384,
+				Algorithm: dnsv1.HmacSHA384,
 			},
 			[]byte{
 				0x21, 0x29, 0xfa, 0x1c, 0x10, 0x4b, 0x12, 0x81,
@@ -115,11 +115,11 @@ func TestHMACGenerate(t *testing.T) {
 			"sha512",
 			tsig.HMAC{"example.": "WCltYAUyQQjslkIIOXnvJkC3bSlCPEsl6gYEzkIyUbnXbmJZA5PTgSL8fLlwfDKYJl/SiFMTOzQxWvH7AmUvSw=="},
 			[]byte("message"),
-			&dns.TSIG{
-				Hdr: dns.RR_Header{
+			&dnsv1.TSIG{
+				Hdr: dnsv1.RR_Header{
 					Name: "example.",
 				},
-				Algorithm: dns.HmacSHA512,
+				Algorithm: dnsv1.HmacSHA512,
 			},
 			[]byte{
 				0xdb, 0x3e, 0x97, 0x64, 0x17, 0x8a, 0x93, 0x60,
@@ -137,37 +137,37 @@ func TestHMACGenerate(t *testing.T) {
 			"algorithm",
 			tsig.HMAC{"example.": ""},
 			[]byte("message"),
-			&dns.TSIG{
-				Hdr: dns.RR_Header{
+			&dnsv1.TSIG{
+				Hdr: dnsv1.RR_Header{
 					Name: "example.",
 				},
 				Algorithm: tsig.GSS,
 			},
 			nil,
-			dns.ErrKeyAlg,
+			dnsv1.ErrKeyAlg,
 		},
 		{
 			"secret",
 			tsig.HMAC{},
 			[]byte("message"),
-			&dns.TSIG{
-				Hdr: dns.RR_Header{
+			&dnsv1.TSIG{
+				Hdr: dnsv1.RR_Header{
 					Name: "example.",
 				},
-				Algorithm: dns.HmacMD5,
+				Algorithm: dnsv1.HmacMD5,
 			},
 			nil,
-			dns.ErrSecret,
+			dnsv1.ErrSecret,
 		},
 		{
 			"garbage",
 			tsig.HMAC{"example.": "garbage"},
 			[]byte("message"),
-			&dns.TSIG{
-				Hdr: dns.RR_Header{
+			&dnsv1.TSIG{
+				Hdr: dnsv1.RR_Header{
 					Name: "example.",
 				},
-				Algorithm: dns.HmacMD5,
+				Algorithm: dnsv1.HmacMD5,
 			},
 			nil,
 			base64.CorruptInputError(4),
@@ -193,18 +193,18 @@ func TestHMACVerify(t *testing.T) {
 		name     string
 		provider tsig.HMAC
 		msg      []byte
-		tsig     *dns.TSIG
+		tsig     *dnsv1.TSIG
 		err      error
 	}{
 		{
 			"md5",
 			tsig.HMAC{"example.": "DRwIYZn6exnhof/mcV/aEQ=="},
 			[]byte("message"),
-			&dns.TSIG{
-				Hdr: dns.RR_Header{
+			&dnsv1.TSIG{
+				Hdr: dnsv1.RR_Header{
 					Name: "example.",
 				},
-				Algorithm: dns.HmacMD5,
+				Algorithm: dnsv1.HmacMD5,
 				MAC: hex.EncodeToString([]byte{
 					0x0b, 0x78, 0x2f, 0xf6, 0xac, 0xb3, 0xf6, 0xbe,
 					0x52, 0xdb, 0x22, 0xc7, 0xce, 0x08, 0x11, 0x77,
@@ -216,24 +216,24 @@ func TestHMACVerify(t *testing.T) {
 			"algorithm",
 			tsig.HMAC{"example.": "DRwIYZn6exnhof/mcV/aEQ=="},
 			[]byte("message"),
-			&dns.TSIG{
-				Hdr: dns.RR_Header{
+			&dnsv1.TSIG{
+				Hdr: dnsv1.RR_Header{
 					Name: "example.",
 				},
 				Algorithm: tsig.GSS,
 				MAC:       "",
 			},
-			dns.ErrKeyAlg,
+			dnsv1.ErrKeyAlg,
 		},
 		{
 			"garbage",
 			tsig.HMAC{"example.": "DRwIYZn6exnhof/mcV/aEQ=="},
 			[]byte("message"),
-			&dns.TSIG{
-				Hdr: dns.RR_Header{
+			&dnsv1.TSIG{
+				Hdr: dnsv1.RR_Header{
 					Name: "example.",
 				},
-				Algorithm: dns.HmacMD5,
+				Algorithm: dnsv1.HmacMD5,
 				MAC:       "garbage",
 			},
 			hex.InvalidByteError(0x67),
@@ -242,17 +242,17 @@ func TestHMACVerify(t *testing.T) {
 			"signature",
 			tsig.HMAC{"example.": "DRwIYZn6exnhof/mcV/aEQ=="},
 			[]byte("different"),
-			&dns.TSIG{
-				Hdr: dns.RR_Header{
+			&dnsv1.TSIG{
+				Hdr: dnsv1.RR_Header{
 					Name: "example.",
 				},
-				Algorithm: dns.HmacMD5,
+				Algorithm: dnsv1.HmacMD5,
 				MAC: hex.EncodeToString([]byte{
 					0x0b, 0x78, 0x2f, 0xf6, 0xac, 0xb3, 0xf6, 0xbe,
 					0x52, 0xdb, 0x22, 0xc7, 0xce, 0x08, 0x11, 0x77,
 				}),
 			},
-			dns.ErrSig,
+			dnsv1.ErrSig,
 		},
 	}
 
