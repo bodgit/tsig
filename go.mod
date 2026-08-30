@@ -10,7 +10,7 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/jcmturner/gokrb5/v8 v8.4.4
 	github.com/miekg/dns v1.1.72
-	github.com/openshift/gssapi v0.0.0-20161010215902-5fb4217df13b
+	github.com/openshift/gssapi v0.0.0-20260819120910-d6b72669a11e
 	github.com/stretchr/testify v1.11.1
 )
 
